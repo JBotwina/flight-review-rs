@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          lfs: true  # fixtures are stored via Git LFS
 
       - run: rustup show  # installs version from rust-toolchain.toml
 
@@ -41,6 +43,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          lfs: true  # fixtures are stored via Git LFS
 
       - run: rustup show  # installs version from rust-toolchain.toml
 

@@ -257,25 +257,13 @@ mod tests {
 
     fn px4_ulog_fixture(name: &str) -> String {
         let manifest = env!("CARGO_MANIFEST_DIR");
-
-        // First: check local fixtures in the converter crate
-        let local = std::path::Path::new(manifest)
+        std::path::Path::new(manifest)
             .parent().unwrap()  // crates/
             .parent().unwrap()  // workspace root
             .join("crates/converter/tests/fixtures")
-            .join(name);
-        if local.exists() {
-            return local.to_string_lossy().to_string();
-        }
-
-        // Fallback: px4-ulog-rs repo (local dev)
-        let external = std::path::Path::new(manifest)
-            .parent().unwrap()  // crates/
-            .parent().unwrap()  // workspace root
-            .parent().unwrap()  // ulog/
-            .join("px4-ulog-rs/tests/fixtures")
-            .join(name);
-        external.to_string_lossy().to_string()
+            .join(name)
+            .to_string_lossy()
+            .to_string()
     }
 
     #[test]
