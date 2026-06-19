@@ -11,31 +11,18 @@
 
 use std::collections::HashMap;
 
-/// Resolve a test fixture path by name.
+/// Resolve a test fixture path by name from the converter crate's fixtures.
 pub fn fixture_path(name: &str) -> String {
     let manifest = env!("CARGO_MANIFEST_DIR");
-
-    let local = std::path::Path::new(manifest)
+    std::path::Path::new(manifest)
         .parent()
         .unwrap()
         .parent()
         .unwrap()
         .join("crates/converter/tests/fixtures")
-        .join(name);
-    if local.exists() {
-        return local.to_string_lossy().to_string();
-    }
-
-    let external = std::path::Path::new(manifest)
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("px4-ulog-rs/tests/fixtures")
-        .join(name);
-    external.to_string_lossy().to_string()
+        .join(name)
+        .to_string_lossy()
+        .to_string()
 }
 
 /// Run all registered analyses on a fixture file.
