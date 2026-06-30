@@ -7,6 +7,22 @@ use crate::extract::extract_search_fields;
 
 use super::ApiError;
 
+/// Map v1 Flight Review / QGroundControl multipart names to v2 field names.
+fn normalize_upload_field_name(name: &str) -> &str {
+    match name {
+        "filearg" => "file",
+        "public" => "is_public",
+        "vehicleName" => "vehicle_name",
+        "windSpeed" => "wind_speed",
+        "videoUrl" => "video_url",
+        other => other,
+    }
+}
+
+fn is_qgroundcontrol_upload(source: Option<&str>) -> bool {
+    source.is_some_and(|s| s.eq_ignore_ascii_case("QGroundControl"))
+}
+
 pub async fn upload(
     State(state): State<Arc<crate::AppState>>,
     mut multipart: Multipart,
@@ -30,7 +46,9 @@ pub async fn upload(
         .await
         .map_err(|e| ApiError::BadRequest(format!("multipart error: {e}")))?
     {
-        if field.name() == Some("file") {
+        let field_name = field.name().map(normalize_upload_field_name).unwrap_or("");
+
+        if field_name == "file" {
             let filename = field
                 .file_name()
                 .unwrap_or("upload.ulg")
@@ -40,37 +58,37 @@ pub async fn upload(
                 .await
                 .map_err(|e| ApiError::BadRequest(format!("failed to read file field: {e}")))?;
             file_bytes = Some((filename, data));
-        } else if field.name() == Some("is_public") {
+        } else if field_name == "is_public" {
             let val = field.text().await.unwrap_or_default();
             is_public = val == "true" || val == "1";
-        } else if field.name() == Some("description") {
+        } else if field_name == "description" {
             description = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("wind_speed") {
+        } else if field_name == "wind_speed" {
             wind_speed = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("rating") {
+        } else if field_name == "rating" {
             let val = field.text().await.unwrap_or_default();
             rating = val.parse::<i32>().ok();
-        } else if field.name() == Some("feedback") {
+        } else if field_name == "feedback" {
             feedback = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("video_url") {
+        } else if field_name == "video_url" {
             video_url = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("source") {
+        } else if field_name == "source" {
             source = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("pilot_name") {
+        } else if field_name == "pilot_name" {
             pilot_name = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("vehicle_name") {
+        } else if field_name == "vehicle_name" {
             vehicle_name = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("tags") {
+        } else if field_name == "tags" {
             tags = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("location_name") {
+        } else if field_name == "location_name" {
             location_name = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("mission_type") {
+        } else if field_name == "mission_type" {
             mission_type = Some(field.text().await.unwrap_or_default());
         }
     }
 
     let (original_filename, data) = file_bytes.ok_or_else(|| {
-        ApiError::BadRequest("missing 'file' field in multipart form".to_string())
+        ApiError::BadRequest("missing 'file' or 'filearg' field in multipart form".to_string())
     })?;
 
     let file_size = data.len() as i64;
@@ -146,6 +164,7 @@ pub async fn upload(
 
     // 6. Create a LogRecord from the metadata and insert into DB
     let delete_token = Uuid::new_v4().simple().to_string();
+    let qgc_response = is_qgroundcontrol_upload(source.as_deref());
     let search = extract_search_fields(&result.metadata);
     let record = crate::db::LogRecord {
         id: log_id,
@@ -236,7 +255,12 @@ pub async fn upload(
         "upload complete"
     );
 
-    // 8. Return JSON with log id and metadata summary
+    // 8. Return JSON for the v1/QGC contract or the default v2 response.
+    if qgc_response {
+        let plot_url = format!("/plot_app?log={log_id}");
+        return Ok(Json(serde_json::json!({ "url": plot_url })));
+    }
+
     Ok(Json(serde_json::json!({
         "id": log_id,
         "filename": record.filename,
