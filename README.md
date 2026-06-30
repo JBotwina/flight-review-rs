@@ -235,6 +235,10 @@ cargo run -p flight-review-server -- serve \
   --db "sqlite://data/flight-review.db?mode=rwc" \
   --storage "file://data/files"
 
+# Restart the server on Rust source changes
+cargo install cargo-watch
+scripts/dev-server-watch.sh
+
 # Run the CLI
 cargo run -p flight-review --bin ulog-convert -- --help
 ```
