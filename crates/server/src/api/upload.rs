@@ -7,6 +7,33 @@ use crate::extract::extract_search_fields;
 
 use super::ApiError;
 
+fn legacy_field_name(name: &str) -> &str {
+    match name {
+        "filearg" => "file",
+        "public" => "is_public",
+        "windSpeed" => "wind_speed",
+        "videoUrl" => "video_url",
+        "vehicleName" => "vehicle_name",
+        _ => name,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::legacy_field_name;
+
+    #[test]
+    fn legacy_upload_field_names_map_to_canonical_names() {
+        assert_eq!(legacy_field_name("filearg"), "file");
+        assert_eq!(legacy_field_name("public"), "is_public");
+        assert_eq!(legacy_field_name("windSpeed"), "wind_speed");
+        assert_eq!(legacy_field_name("videoUrl"), "video_url");
+        assert_eq!(legacy_field_name("vehicleName"), "vehicle_name");
+        assert_eq!(legacy_field_name("file"), "file");
+        assert_eq!(legacy_field_name("is_public"), "is_public");
+    }
+}
+
 pub async fn upload(
     State(state): State<Arc<crate::AppState>>,
     mut multipart: Multipart,
@@ -30,42 +57,58 @@ pub async fn upload(
         .await
         .map_err(|e| ApiError::BadRequest(format!("multipart error: {e}")))?
     {
-        if field.name() == Some("file") {
-            let filename = field
-                .file_name()
-                .unwrap_or("upload.ulg")
-                .to_string();
-            let data = field
-                .bytes()
-                .await
-                .map_err(|e| ApiError::BadRequest(format!("failed to read file field: {e}")))?;
-            file_bytes = Some((filename, data));
-        } else if field.name() == Some("is_public") {
-            let val = field.text().await.unwrap_or_default();
-            is_public = val == "true" || val == "1";
-        } else if field.name() == Some("description") {
-            description = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("wind_speed") {
-            wind_speed = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("rating") {
-            let val = field.text().await.unwrap_or_default();
-            rating = val.parse::<i32>().ok();
-        } else if field.name() == Some("feedback") {
-            feedback = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("video_url") {
-            video_url = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("source") {
-            source = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("pilot_name") {
-            pilot_name = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("vehicle_name") {
-            vehicle_name = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("tags") {
-            tags = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("location_name") {
-            location_name = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("mission_type") {
-            mission_type = Some(field.text().await.unwrap_or_default());
+        let field_name = field.name().map(legacy_field_name).map(str::to_owned);
+        match field_name.as_deref() {
+            Some("file") => {
+                let filename = field
+                    .file_name()
+                    .unwrap_or("upload.ulg")
+                    .to_string();
+                let data = field
+                    .bytes()
+                    .await
+                    .map_err(|e| ApiError::BadRequest(format!("failed to read file field: {e}")))?;
+                file_bytes = Some((filename, data));
+            }
+            Some("is_public") => {
+                let val = field.text().await.unwrap_or_default();
+                is_public = val == "true" || val == "1";
+            }
+            Some("description") => {
+                description = Some(field.text().await.unwrap_or_default());
+            }
+            Some("wind_speed") => {
+                wind_speed = Some(field.text().await.unwrap_or_default());
+            }
+            Some("rating") => {
+                let val = field.text().await.unwrap_or_default();
+                rating = val.parse::<i32>().ok();
+            }
+            Some("feedback") => {
+                feedback = Some(field.text().await.unwrap_or_default());
+            }
+            Some("video_url") => {
+                video_url = Some(field.text().await.unwrap_or_default());
+            }
+            Some("source") => {
+                source = Some(field.text().await.unwrap_or_default());
+            }
+            Some("pilot_name") => {
+                pilot_name = Some(field.text().await.unwrap_or_default());
+            }
+            Some("vehicle_name") => {
+                vehicle_name = Some(field.text().await.unwrap_or_default());
+            }
+            Some("tags") => {
+                tags = Some(field.text().await.unwrap_or_default());
+            }
+            Some("location_name") => {
+                location_name = Some(field.text().await.unwrap_or_default());
+            }
+            Some("mission_type") => {
+                mission_type = Some(field.text().await.unwrap_or_default());
+            }
+            _ => {}
         }
     }
 
