@@ -275,6 +275,11 @@ fn build_where_postgres(filters: &ListFilters) -> (String, Vec<String>, usize) {
     if !filters.include_private.unwrap_or(false) {
         conditions.push("is_public = true".to_string());
     }
+    if !filters.include_ci.unwrap_or(false) {
+        conditions.push(format!("(source IS NULL OR source != ${})", param_idx));
+        bind_values.push("CI".to_string());
+        param_idx += 1;
+    }
     if let Some(ref sys_name) = filters.sys_name {
         conditions.push(format!("sys_name = ${}", param_idx));
         bind_values.push(sys_name.clone());

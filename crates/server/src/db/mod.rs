@@ -201,7 +201,7 @@ pub struct LogRecord {
     pub diagnostic_flags: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct ListFilters {
     // Existing filters
     pub sys_name: Option<String>,
@@ -211,6 +211,8 @@ pub struct ListFilters {
     pub limit: Option<i64>,
     /// If true, include private logs in results (default: only public)
     pub include_private: Option<bool>,
+    /// If true, include CI-uploaded logs in public listings (default: hidden, like v1).
+    pub include_ci: Option<bool>,
 
     // Phase 1 search filters
     /// ISO-8601 date string lower bound on created_at
