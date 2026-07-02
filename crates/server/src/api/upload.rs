@@ -7,6 +7,10 @@ use crate::extract::extract_search_fields;
 
 use super::ApiError;
 
+pub fn is_uploader_email_field(name: &str) -> bool {
+    matches!(name, "email" | "uploader_email")
+}
+
 pub async fn upload(
     State(state): State<Arc<crate::AppState>>,
     mut multipart: Multipart,
@@ -20,6 +24,7 @@ pub async fn upload(
     let mut feedback: Option<String> = None;
     let mut video_url: Option<String> = None;
     let mut source: Option<String> = None;
+    let mut uploader_email: Option<String> = None;
     let mut pilot_name: Option<String> = None;
     let mut vehicle_name: Option<String> = None;
     let mut tags: Option<String> = None;
@@ -30,7 +35,8 @@ pub async fn upload(
         .await
         .map_err(|e| ApiError::BadRequest(format!("multipart error: {e}")))?
     {
-        if field.name() == Some("file") {
+        let field_name = field.name().map(str::to_string);
+        if field_name.as_deref() == Some("file") {
             let filename = field
                 .file_name()
                 .unwrap_or("upload.ulg")
@@ -40,31 +46,33 @@ pub async fn upload(
                 .await
                 .map_err(|e| ApiError::BadRequest(format!("failed to read file field: {e}")))?;
             file_bytes = Some((filename, data));
-        } else if field.name() == Some("is_public") {
+        } else if field_name.as_deref() == Some("is_public") {
             let val = field.text().await.unwrap_or_default();
             is_public = val == "true" || val == "1";
-        } else if field.name() == Some("description") {
+        } else if field_name.as_deref() == Some("description") {
             description = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("wind_speed") {
+        } else if field_name.as_deref() == Some("wind_speed") {
             wind_speed = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("rating") {
+        } else if field_name.as_deref() == Some("rating") {
             let val = field.text().await.unwrap_or_default();
             rating = val.parse::<i32>().ok();
-        } else if field.name() == Some("feedback") {
+        } else if field_name.as_deref() == Some("feedback") {
             feedback = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("video_url") {
+        } else if field_name.as_deref() == Some("video_url") {
             video_url = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("source") {
+        } else if field_name.as_deref() == Some("source") {
             source = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("pilot_name") {
+        } else if field_name.as_deref().is_some_and(is_uploader_email_field) {
+            uploader_email = Some(field.text().await.unwrap_or_default());
+        } else if field_name.as_deref() == Some("pilot_name") {
             pilot_name = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("vehicle_name") {
+        } else if field_name.as_deref() == Some("vehicle_name") {
             vehicle_name = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("tags") {
+        } else if field_name.as_deref() == Some("tags") {
             tags = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("location_name") {
+        } else if field_name.as_deref() == Some("location_name") {
             location_name = Some(field.text().await.unwrap_or_default());
-        } else if field.name() == Some("mission_type") {
+        } else if field_name.as_deref() == Some("mission_type") {
             mission_type = Some(field.text().await.unwrap_or_default());
         }
     }
@@ -167,6 +175,7 @@ pub async fn upload(
         feedback,
         video_url,
         source,
+        uploader_email: uploader_email.clone(),
         pilot_name,
         vehicle_name,
         tags,
@@ -237,6 +246,13 @@ pub async fn upload(
     );
 
     // 8. Return JSON with log id and metadata summary
+    let notification = uploader_email.as_ref().map(|email| {
+        serde_json::json!({
+            "status": "captured",
+            "uploader_email": email,
+        })
+    });
+
     Ok(Json(serde_json::json!({
         "id": log_id,
         "filename": record.filename,
@@ -246,6 +262,8 @@ pub async fn upload(
         "topic_count": record.topic_count,
         "is_public": is_public,
         "delete_token": delete_token,
+        "uploader_email": uploader_email,
+        "notification": notification,
         "parquet_files": result.parquet_files.iter()
             .filter_map(|p| p.file_name().and_then(|n| n.to_str()).map(String::from))
             .collect::<Vec<_>>(),

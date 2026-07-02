@@ -298,6 +298,7 @@ async fn run_migrate(config: MigrateConfig) {
             feedback,
             video_url,
             source,
+            uploader_email: None,
             pilot_name: None,
             vehicle_name: None,
             tags: None,

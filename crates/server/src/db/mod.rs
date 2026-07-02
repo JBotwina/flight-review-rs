@@ -161,6 +161,8 @@ pub struct LogRecord {
     pub video_url: Option<String>,
     /// Upload source: "web", "CI", "QGC", "API"
     pub source: Option<String>,
+    /// Optional uploader email captured for future upload notifications.
+    pub uploader_email: Option<String>,
     /// Pilot name
     pub pilot_name: Option<String>,
     /// Vehicle name/callsign
@@ -201,7 +203,7 @@ pub struct LogRecord {
     pub diagnostic_flags: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct ListFilters {
     // Existing filters
     pub sys_name: Option<String>,
