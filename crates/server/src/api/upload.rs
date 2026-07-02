@@ -7,6 +7,23 @@ use crate::extract::extract_search_fields;
 
 use super::ApiError;
 
+fn log_view_url(log_id: Uuid) -> String {
+    format!("/log/{log_id}")
+}
+
+#[cfg(test)]
+mod tests {
+    use uuid::Uuid;
+
+    use super::log_view_url;
+
+    #[test]
+    fn upload_response_url_points_to_log_viewer() {
+        let log_id = Uuid::parse_str("00000000-0000-0000-0000-000000000123").unwrap();
+        assert_eq!(log_view_url(log_id), "/log/00000000-0000-0000-0000-000000000123");
+    }
+}
+
 pub async fn upload(
     State(state): State<Arc<crate::AppState>>,
     mut multipart: Multipart,
@@ -236,9 +253,10 @@ pub async fn upload(
         "upload complete"
     );
 
-    // 8. Return JSON with log id and metadata summary
+    // 8. Return JSON with log id, metadata summary, and a legacy-compatible URL.
     Ok(Json(serde_json::json!({
         "id": log_id,
+        "url": log_view_url(log_id),
         "filename": record.filename,
         "sys_name": record.sys_name,
         "ver_hw": record.ver_hw,
