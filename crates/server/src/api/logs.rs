@@ -5,6 +5,10 @@ use axum::{
     Json,
 };
 use bytes::Bytes;
+use flight_review::{
+    analysis::ParamDiff,
+    metadata::{FlightMetadata, ParamValue},
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -130,6 +134,165 @@ pub struct TrackPointCompact {
     pub m: u8, // mode_id, short name to minimize payload
 }
 
+/// GET /api/logs/:id/download/parameters -- legacy-compatible PX4 params file.
+pub async fn download_parameters(
+    State(state): State<Arc<crate::AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, ApiError> {
+    let metadata = load_metadata(&state, id).await?;
+    let body = format_parameters(&metadata);
+    Ok(download_response("vehicle.params", body))
+}
+
+/// GET /api/logs/:id/download/non-default-parameters -- legacy-compatible PX4 params file.
+pub async fn download_non_default_parameters(
+    State(state): State<Arc<crate::AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, ApiError> {
+    let metadata = load_metadata(&state, id).await?;
+    let body = format_non_default_parameters(&metadata);
+    Ok(download_response("non-default.params", body))
+}
+
+/// GET /api/logs/:id/download/kml -- legacy KML download placeholder.
+pub async fn download_kml(
+    State(state): State<Arc<crate::AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    // Preserve 404 semantics for unknown logs while making the unsupported
+    // artifact explicit for known/converted logs.
+    let _ = load_metadata(&state, id).await?;
+    Err(ApiError::NotImplemented(
+        "KML download generation is not implemented for converted metadata yet".to_string(),
+    ))
+}
+
+async fn load_metadata(state: &crate::AppState, id: Uuid) -> Result<FlightMetadata, ApiError> {
+    let data = match state.storage.get_file(id, "metadata.json").await {
+        Ok(d) => d,
+        Err(_) if state.v1_ulg_prefix.is_some() => {
+            let converted = lazy_convert(state, id).await?;
+            if !converted {
+                return Err(ApiError::NotFound);
+            }
+            state
+                .storage
+                .get_file(id, "metadata.json")
+                .await
+                .map_err(|_| ApiError::NotFound)?
+        }
+        Err(_) => return Err(ApiError::NotFound),
+    };
+
+    serde_json::from_slice(&data).map_err(|e| ApiError::Internal(format!("metadata json: {e}")))
+}
+
+fn download_response(filename: &'static str, body: String) -> impl IntoResponse {
+    let len = body.len().to_string();
+    (
+        StatusCode::OK,
+        [
+            ("content-type", "application/octet-stream".to_string()),
+            ("content-description", "File Transfer".to_string()),
+            (
+                "content-disposition",
+                format!("attachment; filename={filename}"),
+            ),
+            ("content-length", len),
+        ],
+        body,
+    )
+}
+
+fn format_parameters(metadata: &FlightMetadata) -> String {
+    let mut names: Vec<_> = metadata.parameters.keys().collect();
+    names.sort();
+
+    let mut out = String::new();
+    for name in names {
+        if let Some(value) = metadata.parameters.get(name) {
+            push_param_line(&mut out, name, value);
+        }
+    }
+    out
+}
+
+fn format_non_default_parameters(metadata: &FlightMetadata) -> String {
+    if let Some(analysis) = &metadata.analysis {
+        return format_param_diffs(metadata, &analysis.non_default_params);
+    }
+
+    let mut diffs = Vec::new();
+    for (name, value) in &metadata.parameters {
+        if name.starts_with("RC") || name.starts_with("CAL_") {
+            continue;
+        }
+        if let Some(default) = metadata.default_parameters.get(name) {
+            if !param_values_equal(value, default) {
+                diffs.push(ParamDiff {
+                    name: name.clone(),
+                    value: param_value_as_f64(value),
+                    default: param_value_as_f64(default),
+                });
+            }
+        }
+    }
+    diffs.sort_by(|a, b| a.name.cmp(&b.name));
+    format_param_diffs(metadata, &diffs)
+}
+
+fn format_param_diffs(metadata: &FlightMetadata, diffs: &[ParamDiff]) -> String {
+    let mut out = String::new();
+    for diff in diffs {
+        if let Some(value) = metadata.parameters.get(&diff.name) {
+            push_param_line(&mut out, &diff.name, value);
+        } else {
+            push_param_line(&mut out, &diff.name, &ParamValue::Float(diff.value as f32));
+        }
+    }
+    out
+}
+
+fn push_param_line(out: &mut String, name: &str, value: &ParamValue) {
+    let type_id = match value {
+        ParamValue::Int32(_) => 6,
+        ParamValue::Float(_) => 9,
+    };
+    out.push_str("1\t1\t");
+    out.push_str(name);
+    out.push('\t');
+    out.push_str(&param_value_to_string(value));
+    out.push('\t');
+    out.push_str(&type_id.to_string());
+    out.push('\n');
+}
+
+fn param_value_to_string(value: &ParamValue) -> String {
+    match value {
+        ParamValue::Int32(v) => v.to_string(),
+        ParamValue::Float(v) => format_float(*v as f64),
+    }
+}
+
+fn param_value_as_f64(value: &ParamValue) -> f64 {
+    match value {
+        ParamValue::Int32(v) => *v as f64,
+        ParamValue::Float(v) => *v as f64,
+    }
+}
+
+fn param_values_equal(a: &ParamValue, b: &ParamValue) -> bool {
+    (param_value_as_f64(a) - param_value_as_f64(b)).abs() <= f64::EPSILON
+}
+
+fn format_float(value: f64) -> String {
+    if value.fract() == 0.0 {
+        format!("{value:.1}")
+    } else {
+        value.to_string()
+    }
+}
+
 /// GET /api/logs/:id/data/:filename -- serve Parquet/metadata files
 /// Supports HTTP Range requests for DuckDB-WASM compatibility.
 /// If the file does not exist in v2 storage but a v1 ULG prefix is configured,
@@ -237,8 +400,7 @@ async fn lazy_convert(state: &crate::AppState, id: Uuid) -> Result<bool, ApiErro
     let file_size = ulg_data.len() as i64;
 
     // Write to temp file and convert
-    let tmp_dir =
-        tempfile::tempdir().map_err(|e| ApiError::Internal(format!("tempdir: {e}")))?;
+    let tmp_dir = tempfile::tempdir().map_err(|e| ApiError::Internal(format!("tempdir: {e}")))?;
     let input_path = tmp_dir.path().join("input.ulg");
     tokio::fs::write(&input_path, &ulg_data).await?;
 
@@ -276,10 +438,7 @@ async fn lazy_convert(state: &crate::AppState, id: Uuid) -> Result<bool, ApiErro
 
     // Copy the raw .ulg into the UUID directory so everything lives together
     let ulg_filename = format!("{}.ulg", id);
-    state
-        .storage
-        .put_file(id, &ulg_filename, ulg_data)
-        .await?;
+    state.storage.put_file(id, &ulg_filename, ulg_data).await?;
 
     // Update the DB record with fields extracted from the conversion
     if let Some(mut record) = state.db.get(id).await? {
@@ -290,7 +449,10 @@ async fn lazy_convert(state: &crate::AppState, id: Uuid) -> Result<bool, ApiErro
             .ver_sw_release_str
             .clone()
             .or(record.ver_sw_release_str);
-        record.flight_duration_s = result.metadata.flight_duration_s.or(record.flight_duration_s);
+        record.flight_duration_s = result
+            .metadata
+            .flight_duration_s
+            .or(record.flight_duration_s);
         record.topic_count = result.metadata.topics.len() as i32;
         record.lat = result
             .metadata
@@ -330,13 +492,9 @@ async fn lazy_convert(state: &crate::AppState, id: Uuid) -> Result<bool, ApiErro
             if let (Some(lat_val), Some(lon_val), Some(token)) =
                 (record.lat, record.lon, state.mapbox_token.as_deref())
             {
-                if let Some(name) = crate::geocode::reverse_geocode(
-                    &state.http_client,
-                    token,
-                    lat_val,
-                    lon_val,
-                )
-                .await
+                if let Some(name) =
+                    crate::geocode::reverse_geocode(&state.http_client, token, lat_val, lon_val)
+                        .await
                 {
                     tracing::info!(log_id = %id, location = %name, "geocoded location (lazy)");
                     record.location_name = Some(name);
@@ -387,9 +545,7 @@ fn parse_byte_range(range_str: &str) -> Result<(u64, u64), ApiError> {
     let range_spec = &range_str[bytes_prefix.len()..];
     let parts: Vec<&str> = range_spec.splitn(2, '-').collect();
     if parts.len() != 2 {
-        return Err(ApiError::BadRequest(format!(
-            "invalid range: {range_str}"
-        )));
+        return Err(ApiError::BadRequest(format!("invalid range: {range_str}")));
     }
 
     let start: u64 = parts[0]

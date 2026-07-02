@@ -38,3 +38,4 @@ chrono = { version = "0.4", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json", "multipart"] }
+tower = { version = "0.5", features = ["util"] }
