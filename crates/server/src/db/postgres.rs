@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS logs (
     feedback TEXT,
     video_url TEXT,
     source TEXT,
+    uploader_email TEXT,
     pilot_name TEXT,
     vehicle_name TEXT,
     tags TEXT,
@@ -141,6 +142,7 @@ const ALTER_COLUMNS: &[&str] = &[
     "ALTER TABLE logs ADD COLUMN IF NOT EXISTS warning_count INTEGER",
     "ALTER TABLE logs ADD COLUMN IF NOT EXISTS analysis_version INTEGER DEFAULT 0",
     "ALTER TABLE logs ADD COLUMN IF NOT EXISTS diagnostic_flags TEXT",
+    "ALTER TABLE logs ADD COLUMN IF NOT EXISTS uploader_email TEXT",
 ];
 
 #[cfg(feature = "postgres")]
@@ -218,6 +220,7 @@ fn row_to_record(row: &sqlx::postgres::PgRow) -> Result<LogRecord, sqlx::Error> 
         feedback: row.try_get("feedback")?,
         video_url: row.try_get("video_url")?,
         source: row.try_get("source")?,
+        uploader_email: row.try_get("uploader_email")?,
         pilot_name: row.try_get("pilot_name")?,
         vehicle_name: row.try_get("vehicle_name")?,
         tags: row.try_get("tags")?,
@@ -490,14 +493,14 @@ impl LogStore for PostgresStore {
         sqlx::query(
             "INSERT INTO logs (id, filename, created_at, file_size, sys_name, ver_hw, \
              ver_sw_release_str, flight_duration_s, topic_count, lat, lon, is_public, delete_token, \
-             description, wind_speed, rating, feedback, video_url, source, pilot_name, \
+             description, wind_speed, rating, feedback, video_url, source, uploader_email, pilot_name, \
              vehicle_name, tags, location_name, mission_type, \
              sys_uuid, ver_sw, vehicle_type, localization_sources, vibration_status, \
              battery_min_voltage, gps_max_eph, max_speed_m_s, total_distance_m, \
              error_count, warning_count, analysis_version, diagnostic_flags) \
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, \
-             $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, \
-             $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37)",
+             $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, \
+             $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38)",
         )
         .bind(record.id)
         .bind(&record.filename)
@@ -518,6 +521,7 @@ impl LogStore for PostgresStore {
         .bind(&record.feedback)
         .bind(&record.video_url)
         .bind(&record.source)
+        .bind(&record.uploader_email)
         .bind(&record.pilot_name)
         .bind(&record.vehicle_name)
         .bind(&record.tags)
@@ -659,13 +663,13 @@ impl LogStore for PostgresStore {
             "UPDATE logs SET filename = $1, created_at = $2, file_size = $3, sys_name = $4, ver_hw = $5, \
              ver_sw_release_str = $6, flight_duration_s = $7, topic_count = $8, lat = $9, lon = $10, \
              is_public = $11, delete_token = $12, description = $13, wind_speed = $14, rating = $15, \
-             feedback = $16, video_url = $17, source = $18, pilot_name = $19, vehicle_name = $20, \
-             tags = $21, location_name = $22, mission_type = $23, \
-             sys_uuid = $24, ver_sw = $25, vehicle_type = $26, localization_sources = $27, \
-             vibration_status = $28, battery_min_voltage = $29, gps_max_eph = $30, \
-             max_speed_m_s = $31, total_distance_m = $32, error_count = $33, warning_count = $34, \
-             analysis_version = $35, diagnostic_flags = $36 \
-             WHERE id = $37",
+             feedback = $16, video_url = $17, source = $18, uploader_email = $19, pilot_name = $20, vehicle_name = $21, \
+             tags = $22, location_name = $23, mission_type = $24, \
+             sys_uuid = $25, ver_sw = $26, vehicle_type = $27, localization_sources = $28, \
+             vibration_status = $29, battery_min_voltage = $30, gps_max_eph = $31, \
+             max_speed_m_s = $32, total_distance_m = $33, error_count = $34, warning_count = $35, \
+             analysis_version = $36, diagnostic_flags = $37 \
+             WHERE id = $38",
         )
         .bind(&record.filename)
         .bind(record.created_at)
@@ -685,6 +689,7 @@ impl LogStore for PostgresStore {
         .bind(&record.feedback)
         .bind(&record.video_url)
         .bind(&record.source)
+        .bind(&record.uploader_email)
         .bind(&record.pilot_name)
         .bind(&record.vehicle_name)
         .bind(&record.tags)

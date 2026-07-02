@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS logs (
     feedback TEXT,
     video_url TEXT,
     source TEXT,
+    uploader_email TEXT,
     pilot_name TEXT,
     vehicle_name TEXT,
     tags TEXT,
@@ -146,6 +147,7 @@ const ALTER_COLUMNS: &[&str] = &[
     "ALTER TABLE logs ADD COLUMN warning_count INTEGER",
     "ALTER TABLE logs ADD COLUMN analysis_version INTEGER DEFAULT 0",
     "ALTER TABLE logs ADD COLUMN diagnostic_flags TEXT",
+    "ALTER TABLE logs ADD COLUMN uploader_email TEXT",
 ];
 
 #[cfg(feature = "sqlite")]
@@ -248,6 +250,7 @@ fn row_to_record(row: &sqlx::sqlite::SqliteRow) -> Result<LogRecord, sqlx::Error
         feedback: row.try_get("feedback")?,
         video_url: row.try_get("video_url")?,
         source: row.try_get("source")?,
+        uploader_email: row.try_get("uploader_email")?,
         pilot_name: row.try_get("pilot_name")?,
         vehicle_name: row.try_get("vehicle_name")?,
         tags: row.try_get("tags")?,
@@ -474,13 +477,13 @@ impl LogStore for SqliteStore {
         sqlx::query(
             "INSERT INTO logs (id, filename, created_at, file_size, sys_name, ver_hw, \
              ver_sw_release_str, flight_duration_s, topic_count, lat, lon, is_public, delete_token, \
-             description, wind_speed, rating, feedback, video_url, source, pilot_name, \
+             description, wind_speed, rating, feedback, video_url, source, uploader_email, pilot_name, \
              vehicle_name, tags, location_name, mission_type, \
              sys_uuid, ver_sw, vehicle_type, localization_sources, vibration_status, \
              battery_min_voltage, gps_max_eph, max_speed_m_s, total_distance_m, \
              error_count, warning_count, analysis_version, diagnostic_flags) \
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, \
-             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&id)
         .bind(&record.filename)
@@ -501,6 +504,7 @@ impl LogStore for SqliteStore {
         .bind(&record.feedback)
         .bind(&record.video_url)
         .bind(&record.source)
+        .bind(&record.uploader_email)
         .bind(&record.pilot_name)
         .bind(&record.vehicle_name)
         .bind(&record.tags)
@@ -646,7 +650,7 @@ impl LogStore for SqliteStore {
             "UPDATE logs SET filename = ?, created_at = ?, file_size = ?, sys_name = ?, ver_hw = ?, \
              ver_sw_release_str = ?, flight_duration_s = ?, topic_count = ?, lat = ?, lon = ?, \
              is_public = ?, delete_token = ?, description = ?, wind_speed = ?, rating = ?, \
-             feedback = ?, video_url = ?, source = ?, pilot_name = ?, vehicle_name = ?, \
+             feedback = ?, video_url = ?, source = ?, uploader_email = ?, pilot_name = ?, vehicle_name = ?, \
              tags = ?, location_name = ?, mission_type = ?, \
              sys_uuid = ?, ver_sw = ?, vehicle_type = ?, localization_sources = ?, \
              vibration_status = ?, battery_min_voltage = ?, gps_max_eph = ?, \
@@ -672,6 +676,7 @@ impl LogStore for SqliteStore {
         .bind(&record.feedback)
         .bind(&record.video_url)
         .bind(&record.source)
+        .bind(&record.uploader_email)
         .bind(&record.pilot_name)
         .bind(&record.vehicle_name)
         .bind(&record.tags)
