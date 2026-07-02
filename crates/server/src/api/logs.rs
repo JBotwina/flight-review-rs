@@ -31,6 +31,21 @@ pub async fn list_facets(
     Ok(Json(result))
 }
 
+
+/// GET /api/dbinfo -- legacy-compatible public log metadata export.
+pub async fn dbinfo(
+    State(state): State<Arc<crate::AppState>>,
+) -> Result<Json<Vec<crate::db::LogRecord>>, ApiError> {
+    let result = state
+        .db
+        .list(&crate::db::ListFilters {
+            limit: Some(10_000),
+            ..Default::default()
+        })
+        .await?;
+    Ok(Json(result.logs))
+}
+
 /// GET /api/logs/:id -- single log metadata
 pub async fn get_log(
     State(state): State<Arc<crate::AppState>>,

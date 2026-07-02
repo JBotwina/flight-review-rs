@@ -37,6 +37,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         )
         .route("/api/logs", get(api::logs::list_logs))
         .route("/api/logs/facets", get(api::logs::list_facets))
+        .route("/api/dbinfo", get(api::logs::dbinfo))
         .route("/api/stats", get(api::stats::get_stats))
         .route(
             "/api/logs/{id}",
