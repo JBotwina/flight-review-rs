@@ -36,6 +36,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             post(api::upload::upload).layer(DefaultBodyLimit::max(512 * 1024 * 1024)), // 512 MB
         )
         .route("/api/logs", get(api::logs::list_logs))
+        .route("/api/browse_data_retrieval", get(api::logs::browse_data_retrieval))
+        .route("/browse_data_retrieval", get(api::logs::browse_data_retrieval))
         .route("/api/logs/facets", get(api::logs::list_facets))
         .route("/api/stats", get(api::stats::get_stats))
         .route(

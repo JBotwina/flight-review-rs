@@ -31,6 +31,96 @@ pub async fn list_facets(
     Ok(Json(result))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct BrowseDataRetrievalParams {
+    pub draw: Option<i64>,
+    pub start: Option<i64>,
+    pub length: Option<i64>,
+    #[serde(rename = "search[value]")]
+    pub search_value: Option<String>,
+    #[serde(rename = "order[0][column]")]
+    pub order_column: Option<usize>,
+    #[serde(rename = "order[0][dir]")]
+    pub order_dir: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowseDataRetrievalResponse {
+    pub draw: i64,
+    pub records_total: i64,
+    pub records_filtered: i64,
+    pub data: Vec<crate::db::LogRecord>,
+    pub logs: Vec<crate::db::LogRecord>,
+    pub total: i64,
+}
+
+/// GET /api/browse_data_retrieval -- DataTables-compatible legacy browse list.
+pub async fn browse_data_retrieval(
+    State(state): State<Arc<crate::AppState>>,
+    Query(params): Query<BrowseDataRetrievalParams>,
+) -> Result<Json<BrowseDataRetrievalResponse>, ApiError> {
+    let length = params.length.unwrap_or(50).clamp(0, 500);
+    let offset = params.start.unwrap_or(0).max(0);
+    let search = params.search_value.filter(|value| !value.trim().is_empty());
+
+    let total = state
+        .db
+        .list(&crate::db::ListFilters {
+            limit: Some(0),
+            ..Default::default()
+        })
+        .await?
+        .total;
+    let filtered = state
+        .db
+        .list(&crate::db::ListFilters {
+            search: search.clone(),
+            limit: Some(0),
+            ..Default::default()
+        })
+        .await?
+        .total;
+    let result = state
+        .db
+        .list(&crate::db::ListFilters {
+            search,
+            offset: Some(offset),
+            limit: Some(length),
+            sort: legacy_sort(params.order_column, params.order_dir.as_deref()),
+            ..Default::default()
+        })
+        .await?;
+
+    Ok(Json(BrowseDataRetrievalResponse {
+        draw: params.draw.unwrap_or(0),
+        records_total: total,
+        records_filtered: filtered,
+        data: result.logs.clone(),
+        logs: result.logs,
+        total: filtered,
+    }))
+}
+
+fn legacy_sort(column: Option<usize>, direction: Option<&str>) -> Option<String> {
+    let column = match column.unwrap_or(0) {
+        0 | 1 => "created_at",
+        2 => "vehicle_type",
+        3 => "ver_hw",
+        4 => "ver_sw_release_str",
+        5 => "flight_duration_s",
+        6 => "error_count",
+        7 => "warning_count",
+        _ => "created_at",
+    };
+    let direction = if matches!(direction, Some("asc")) {
+        "asc"
+    } else {
+        "desc"
+    };
+    Some(format!("{column}:{direction}"))
+}
+
 /// GET /api/logs/:id -- single log metadata
 pub async fn get_log(
     State(state): State<Arc<crate::AppState>>,
