@@ -279,6 +279,12 @@ fn parse_sort(sort: Option<&str>) -> String {
         "max_speed_m_s",
         "total_distance_m",
         "battery_min_voltage",
+        "vehicle_type",
+        "ver_hw",
+        "ver_sw",
+        "ver_sw_release_str",
+        "error_count",
+        "warning_count",
     ];
     match sort {
         Some(s) => {
