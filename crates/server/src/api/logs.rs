@@ -47,6 +47,21 @@ pub struct DeleteParams {
     pub token: String,
 }
 
+#[derive(Deserialize)]
+pub struct UpdateLogMetadata {
+    pub description: Option<String>,
+    pub wind_speed: Option<String>,
+    pub rating: Option<i32>,
+    pub feedback: Option<String>,
+    pub video_url: Option<String>,
+    pub is_public: Option<bool>,
+    pub vehicle_name: Option<String>,
+    pub source: Option<String>,
+    pub tags: Option<String>,
+    pub location_name: Option<String>,
+    pub mission_type: Option<String>,
+}
+
 /// DELETE /api/logs/:id?token=<delete_token>
 pub async fn delete_log(
     State(state): State<Arc<crate::AppState>>,
@@ -65,6 +80,60 @@ pub async fn delete_log(
     state.storage.delete_log_files(id).await?;
     state.db.delete(id).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// PATCH /api/logs/:id?token=<delete_token>
+/// Updates user-editable metadata while preserving delete-token authorization.
+pub async fn update_log_metadata(
+    State(state): State<Arc<crate::AppState>>,
+    Path(id): Path<Uuid>,
+    Query(params): Query<DeleteParams>,
+    Json(update): Json<UpdateLogMetadata>,
+) -> Result<Json<crate::db::LogRecord>, ApiError> {
+    let mut record = state.db.get(id).await?.ok_or(ApiError::NotFound)?;
+
+    if record.delete_token != params.token {
+        return Err(ApiError::Forbidden);
+    }
+
+    if let Some(description) = update.description {
+        record.description = Some(description);
+    }
+    if let Some(wind_speed) = update.wind_speed {
+        record.wind_speed = Some(wind_speed);
+    }
+    if let Some(rating) = update.rating {
+        record.rating = Some(rating);
+    }
+    if let Some(feedback) = update.feedback {
+        record.feedback = Some(feedback);
+    }
+    if let Some(video_url) = update.video_url {
+        record.video_url = Some(video_url);
+    }
+    if let Some(is_public) = update.is_public {
+        record.is_public = is_public;
+    }
+    if let Some(vehicle_name) = update.vehicle_name {
+        record.vehicle_name = Some(vehicle_name);
+    }
+    if let Some(source) = update.source {
+        record.source = Some(source);
+    }
+    if let Some(tags) = update.tags {
+        record.tags = Some(tags);
+    }
+    if let Some(location_name) = update.location_name {
+        record.location_name = Some(location_name);
+    }
+    if let Some(mission_type) = update.mission_type {
+        record.mission_type = Some(mission_type);
+    }
+
+    state.db.update(id, &record).await?;
+
+    let record = state.db.get(id).await?.ok_or(ApiError::NotFound)?;
+    Ok(Json(record))
 }
 
 /// GET /api/logs/:id/track -- lightweight GPS track for thumbnails

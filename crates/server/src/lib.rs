@@ -40,7 +40,9 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/stats", get(api::stats::get_stats))
         .route(
             "/api/logs/{id}",
-            get(api::logs::get_log).delete(api::logs::delete_log),
+            get(api::logs::get_log)
+                .patch(api::logs::update_log_metadata)
+                .delete(api::logs::delete_log),
         )
         .route("/api/logs/{id}/track", get(api::logs::get_track))
         .route(
