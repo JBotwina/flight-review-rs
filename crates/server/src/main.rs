@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 
-use flight_review_server::{db, storage::FileStorage, AppState};
+use flight_review_server::{db, notification::NotificationConfig, storage::FileStorage, AppState};
 
 #[derive(Parser)]
 #[command(version, about = "Flight Review v2 server")]
@@ -47,6 +47,11 @@ struct ServeConfig {
     /// Can also be set via the MAPBOX_ACCESS_TOKEN environment variable.
     #[arg(long, env = "MAPBOX_ACCESS_TOKEN")]
     mapbox_token: Option<String>,
+
+    /// Capture upload notification metadata for uploader email parity.
+    /// This is a no-op notifier and does not send SMTP email yet.
+    #[arg(long, env = "UPLOAD_NOTIFICATIONS_ENABLED", default_value_t = false)]
+    upload_notifications_enabled: bool,
 }
 
 #[derive(Args)]
@@ -100,13 +105,14 @@ async fn run_server(config: ServeConfig) {
     if config.mapbox_token.is_some() {
         tracing::info!("mapbox geocoding: enabled");
     }
+    if config.upload_notifications_enabled {
+        tracing::info!("upload notification metadata capture: enabled");
+    }
 
     let db = db::create_db(&config.db)
         .await
         .expect("failed to connect to database");
-    let storage = Arc::new(
-        FileStorage::from_url(&config.storage).expect("failed to init storage"),
-    );
+    let storage = Arc::new(FileStorage::from_url(&config.storage).expect("failed to init storage"));
 
     let state = Arc::new(AppState {
         db,
@@ -114,6 +120,9 @@ async fn run_server(config: ServeConfig) {
         v1_ulg_prefix: config.v1_ulg_prefix,
         mapbox_token: config.mapbox_token,
         http_client: reqwest::Client::new(),
+        notification_config: NotificationConfig {
+            upload_notifications_enabled: config.upload_notifications_enabled,
+        },
     });
 
     let app = flight_review_server::build_router(state);
@@ -124,9 +133,7 @@ async fn run_server(config: ServeConfig) {
         .expect("failed to bind listener");
 
     tracing::info!("server listening on {addr}");
-    axum::serve(listener, app)
-        .await
-        .expect("server error");
+    axum::serve(listener, app).await.expect("server error");
 }
 
 /// Map v1 MavType string to a normalized vehicle type category.
@@ -180,7 +187,7 @@ async fn run_migrate(config: MigrateConfig) {
             g.SoftwareVersion, g.NumLoggedErrors, g.NumLoggedWarnings, g.FlightModes, \
             g.FlightModeDurations, g.UUID, g.StartTime \
          FROM Logs l \
-         LEFT JOIN LogsGenerated g ON l.Id = g.Id"
+         LEFT JOIN LogsGenerated g ON l.Id = g.Id",
     )
     .fetch_all(&v1_pool)
     .await
@@ -251,9 +258,7 @@ async fn run_migrate(config: MigrateConfig) {
         let sys_name = hardware.clone().or(mav_type);
         let ver_hw = hardware;
         let ver_sw_release_str = software_version;
-        let flight_duration_s = duration_str
-            .as_deref()
-            .and_then(|s| s.parse::<f64>().ok());
+        let flight_duration_s = duration_str.as_deref().and_then(|s| s.parse::<f64>().ok());
 
         // Pilot-provided context fields from v1 Logs table
         let description: Option<String> = row.try_get("Description").ok().flatten();
@@ -327,7 +332,13 @@ async fn run_migrate(config: MigrateConfig) {
         }
 
         if (i + 1) % 1000 == 0 {
-            tracing::info!("Progress: {}/{} processed ({} imported, {} skipped)", i + 1, total, imported, skipped);
+            tracing::info!(
+                "Progress: {}/{} processed ({} imported, {} skipped)",
+                i + 1,
+                total,
+                imported,
+                skipped
+            );
         }
     }
 

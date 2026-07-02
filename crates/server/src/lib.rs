@@ -2,6 +2,7 @@ pub mod api;
 pub mod db;
 pub mod extract;
 pub mod geocode;
+pub mod notification;
 pub mod storage;
 
 use axum::{
@@ -23,6 +24,8 @@ pub struct AppState {
     pub mapbox_token: Option<String>,
     /// Shared HTTP client for outbound requests (geocoding, etc.).
     pub http_client: reqwest::Client,
+    /// Upload notification behavior. Currently captures metadata without sending mail.
+    pub notification_config: notification::NotificationConfig,
 }
 
 /// Build the application router. Shared by the binary (`main.rs`) and the

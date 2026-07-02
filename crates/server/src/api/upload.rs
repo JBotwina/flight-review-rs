@@ -4,6 +4,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::extract::extract_search_fields;
+use crate::notification::{normalize_uploader_email, prepare_upload_notification};
 
 use super::ApiError;
 
@@ -25,16 +26,14 @@ pub async fn upload(
     let mut tags: Option<String> = None;
     let mut location_name: Option<String> = None;
     let mut mission_type: Option<String> = None;
+    let mut uploader_email: Option<String> = None;
     while let Some(field) = multipart
         .next_field()
         .await
         .map_err(|e| ApiError::BadRequest(format!("multipart error: {e}")))?
     {
         if field.name() == Some("file") {
-            let filename = field
-                .file_name()
-                .unwrap_or("upload.ulg")
-                .to_string();
+            let filename = field.file_name().unwrap_or("upload.ulg").to_string();
             let data = field
                 .bytes()
                 .await
@@ -66,6 +65,8 @@ pub async fn upload(
             location_name = Some(field.text().await.unwrap_or_default());
         } else if field.name() == Some("mission_type") {
             mission_type = Some(field.text().await.unwrap_or_default());
+        } else if matches!(field.name(), Some("email") | Some("uploader_email")) {
+            uploader_email = normalize_uploader_email(Some(field.text().await.unwrap_or_default()));
         }
     }
 
@@ -125,11 +126,10 @@ pub async fn upload(
     // 5b. Reverse-geocode if location_name was not provided by the user
     let lat = result.metadata.gps_first_fix.as_ref().map(|g| g.lat_deg);
     let lon = result.metadata.gps_first_fix.as_ref().map(|g| g.lon_deg);
-    let user_gave_location = location_name
-        .as_ref()
-        .is_some_and(|s| !s.trim().is_empty());
+    let user_gave_location = location_name.as_ref().is_some_and(|s| !s.trim().is_empty());
     if !user_gave_location {
-        if let (Some(lat_val), Some(lon_val), Some(token)) = (lat, lon, state.mapbox_token.as_deref())
+        if let (Some(lat_val), Some(lon_val), Some(token)) =
+            (lat, lon, state.mapbox_token.as_deref())
         {
             match crate::geocode::reverse_geocode(&state.http_client, token, lat_val, lon_val).await
             {
@@ -146,6 +146,8 @@ pub async fn upload(
 
     // 6. Create a LogRecord from the metadata and insert into DB
     let delete_token = Uuid::new_v4().simple().to_string();
+    let upload_notification =
+        prepare_upload_notification(&state.notification_config, uploader_email.as_deref());
     let search = extract_search_fields(&result.metadata);
     let record = crate::db::LogRecord {
         id: log_id,
@@ -216,7 +218,9 @@ pub async fn upload(
                     summary: d.summary.clone(),
                     timestamp_us: Some(d.timestamp_us as i64),
                     end_timestamp_us: match &d.kind {
-                        flight_review::diagnostics::AnomalyKind::Region { end_timestamp_us } => Some(*end_timestamp_us as i64),
+                        flight_review::diagnostics::AnomalyKind::Region { end_timestamp_us } => {
+                            Some(*end_timestamp_us as i64)
+                        }
                         flight_review::diagnostics::AnomalyKind::Point => None,
                     },
                     evidence: serde_json::to_string(&d.evidence).ok(),
@@ -246,6 +250,8 @@ pub async fn upload(
         "topic_count": record.topic_count,
         "is_public": is_public,
         "delete_token": delete_token,
+        "uploader_email": uploader_email,
+        "upload_notification": upload_notification,
         "parquet_files": result.parquet_files.iter()
             .filter_map(|p| p.file_name().and_then(|n| n.to_str()).map(String::from))
             .collect::<Vec<_>>(),
