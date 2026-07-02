@@ -44,6 +44,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         )
         .route("/api/logs/{id}/track", get(api::logs::get_track))
         .route(
+            "/api/logs/{id}/overview.svg",
+            get(api::logs::get_overview_svg),
+        )
+        .route(
             "/api/logs/{id}/data/{filename}",
             get(api::logs::get_log_file),
         )

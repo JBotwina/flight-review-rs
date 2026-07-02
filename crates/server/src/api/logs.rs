@@ -74,6 +74,10 @@ pub async fn get_track(
     State(state): State<Arc<crate::AppState>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<TrackPointCompact>>, ApiError> {
+    Ok(Json(load_track(&state, id).await?))
+}
+
+async fn load_track(state: &crate::AppState, id: Uuid) -> Result<Vec<TrackPointCompact>, ApiError> {
     let data = state
         .storage
         .get_file(id, "metadata.json")
@@ -90,7 +94,7 @@ pub async fn get_track(
         .clone();
 
     if track.is_empty() {
-        return Ok(Json(vec![]));
+        return Ok(vec![]);
     }
 
     // Parse and downsample
@@ -107,7 +111,7 @@ pub async fn get_track(
 
     let max_points = 100;
     if full.len() <= max_points {
-        return Ok(Json(full));
+        return Ok(full);
     }
 
     // Downsample: always keep first and last, evenly sample the rest
@@ -120,7 +124,7 @@ pub async fn get_track(
     }
     sampled.push(full[full.len() - 1].clone());
 
-    Ok(Json(sampled))
+    Ok(sampled)
 }
 
 #[derive(Serialize, Clone)]
@@ -128,6 +132,87 @@ pub struct TrackPointCompact {
     pub lat: f64,
     pub lon: f64,
     pub m: u8, // mode_id, short name to minimize payload
+}
+
+/// GET /api/logs/:id/overview.svg -- lightweight server-rendered track thumbnail.
+///
+/// Legacy Flight Review generated overview PNGs for browse results. v2 keeps the
+/// cheaper track-data model, so this compatibility endpoint renders that same
+/// metadata-backed track as a small SVG image without adding a PNG renderer.
+pub async fn get_overview_svg(
+    State(state): State<Arc<crate::AppState>>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, ApiError> {
+    let track = load_track(&state, id).await?;
+    let svg = render_overview_svg(&track);
+
+    Ok((
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "image/svg+xml".to_string()),
+            (header::CACHE_CONTROL, "public, max-age=3600".to_string()),
+            (header::CONTENT_LENGTH, svg.len().to_string()),
+        ],
+        svg,
+    ))
+}
+
+fn render_overview_svg(track: &[TrackPointCompact]) -> String {
+    const WIDTH: f64 = 240.0;
+    const HEIGHT: f64 = 160.0;
+    const PAD: f64 = 14.0;
+
+    let mut svg = format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH:.0}" height="{HEIGHT:.0}" viewBox="0 0 {WIDTH:.0} {HEIGHT:.0}" role="img" aria-label="Flight Review overview">
+<rect width="100%" height="100%" rx="12" fill="#0f172a"/>
+<path d="M0 112 C48 92 72 124 122 102 S194 76 240 94 V160 H0 Z" fill="#1e293b" opacity="0.8"/>
+<text x="12" y="24" fill="#cbd5e1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="13" font-weight="600">Flight Review</text>
+"##
+    );
+
+    if track.len() >= 2 {
+        let min_lat = track.iter().map(|p| p.lat).fold(f64::INFINITY, f64::min);
+        let max_lat = track
+            .iter()
+            .map(|p| p.lat)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let min_lon = track.iter().map(|p| p.lon).fold(f64::INFINITY, f64::min);
+        let max_lon = track
+            .iter()
+            .map(|p| p.lon)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let lat_span = (max_lat - min_lat).abs().max(f64::EPSILON);
+        let lon_span = (max_lon - min_lon).abs().max(f64::EPSILON);
+
+        let points = track
+            .iter()
+            .map(|point| {
+                let x = PAD + ((point.lon - min_lon) / lon_span) * (WIDTH - PAD * 2.0);
+                let y = PAD + ((max_lat - point.lat) / lat_span) * (HEIGHT - PAD * 2.0);
+                format!("{x:.1},{y:.1}")
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        svg.push_str(&format!(
+            r##"<polyline points="{points}" fill="none" stroke="#38bdf8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="{}" cy="{}" r="4" fill="#22c55e"/>
+<circle cx="{}" cy="{}" r="4" fill="#f97316"/>
+"##,
+            points.split_whitespace().next().unwrap().split(',').next().unwrap(),
+            points.split_whitespace().next().unwrap().split(',').nth(1).unwrap(),
+            points.split_whitespace().last().unwrap().split(',').next().unwrap(),
+            points.split_whitespace().last().unwrap().split(',').nth(1).unwrap(),
+        ));
+    } else {
+        svg.push_str(
+            r##"<text x="120" y="86" text-anchor="middle" fill="#94a3b8" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="14">No GPS track</text>
+"##,
+        );
+    }
+
+    svg.push_str("</svg>");
+    svg
 }
 
 /// GET /api/logs/:id/data/:filename -- serve Parquet/metadata files
@@ -237,8 +322,7 @@ async fn lazy_convert(state: &crate::AppState, id: Uuid) -> Result<bool, ApiErro
     let file_size = ulg_data.len() as i64;
 
     // Write to temp file and convert
-    let tmp_dir =
-        tempfile::tempdir().map_err(|e| ApiError::Internal(format!("tempdir: {e}")))?;
+    let tmp_dir = tempfile::tempdir().map_err(|e| ApiError::Internal(format!("tempdir: {e}")))?;
     let input_path = tmp_dir.path().join("input.ulg");
     tokio::fs::write(&input_path, &ulg_data).await?;
 
@@ -276,10 +360,7 @@ async fn lazy_convert(state: &crate::AppState, id: Uuid) -> Result<bool, ApiErro
 
     // Copy the raw .ulg into the UUID directory so everything lives together
     let ulg_filename = format!("{}.ulg", id);
-    state
-        .storage
-        .put_file(id, &ulg_filename, ulg_data)
-        .await?;
+    state.storage.put_file(id, &ulg_filename, ulg_data).await?;
 
     // Update the DB record with fields extracted from the conversion
     if let Some(mut record) = state.db.get(id).await? {
@@ -290,7 +371,10 @@ async fn lazy_convert(state: &crate::AppState, id: Uuid) -> Result<bool, ApiErro
             .ver_sw_release_str
             .clone()
             .or(record.ver_sw_release_str);
-        record.flight_duration_s = result.metadata.flight_duration_s.or(record.flight_duration_s);
+        record.flight_duration_s = result
+            .metadata
+            .flight_duration_s
+            .or(record.flight_duration_s);
         record.topic_count = result.metadata.topics.len() as i32;
         record.lat = result
             .metadata
@@ -330,13 +414,9 @@ async fn lazy_convert(state: &crate::AppState, id: Uuid) -> Result<bool, ApiErro
             if let (Some(lat_val), Some(lon_val), Some(token)) =
                 (record.lat, record.lon, state.mapbox_token.as_deref())
             {
-                if let Some(name) = crate::geocode::reverse_geocode(
-                    &state.http_client,
-                    token,
-                    lat_val,
-                    lon_val,
-                )
-                .await
+                if let Some(name) =
+                    crate::geocode::reverse_geocode(&state.http_client, token, lat_val, lon_val)
+                        .await
                 {
                     tracing::info!(log_id = %id, location = %name, "geocoded location (lazy)");
                     record.location_name = Some(name);
@@ -387,9 +467,7 @@ fn parse_byte_range(range_str: &str) -> Result<(u64, u64), ApiError> {
     let range_spec = &range_str[bytes_prefix.len()..];
     let parts: Vec<&str> = range_spec.splitn(2, '-').collect();
     if parts.len() != 2 {
-        return Err(ApiError::BadRequest(format!(
-            "invalid range: {range_str}"
-        )));
+        return Err(ApiError::BadRequest(format!("invalid range: {range_str}")));
     }
 
     let start: u64 = parts[0]

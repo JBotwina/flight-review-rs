@@ -19,8 +19,10 @@ fn fixture_path(name: &str) -> std::path::PathBuf {
 
     // First: check local fixtures in the converter crate
     let local = std::path::Path::new(manifest)
-        .parent().unwrap()  // crates/
-        .parent().unwrap()  // workspace root
+        .parent()
+        .unwrap() // crates/
+        .parent()
+        .unwrap() // workspace root
         .join("crates/converter/tests/fixtures")
         .join(name);
     if local.exists() {
@@ -29,15 +31,27 @@ fn fixture_path(name: &str) -> std::path::PathBuf {
 
     // Fallback: px4-ulog-rs repo (local dev)
     std::path::Path::new(manifest)
-        .parent().unwrap()  // crates/
-        .parent().unwrap()  // workspace root
-        .parent().unwrap()  // ulog/
+        .parent()
+        .unwrap() // crates/
+        .parent()
+        .unwrap() // workspace root
+        .parent()
+        .unwrap() // ulog/
         .join("px4-ulog-rs/tests/fixtures")
         .join(name)
 }
 
 /// Start the server in the background and return the base URL.
 async fn start_server() -> (String, tokio::task::JoinHandle<()>) {
+    let (base_url, handle, _) = start_server_with_storage().await;
+    (base_url, handle)
+}
+
+async fn start_server_with_storage() -> (
+    String,
+    tokio::task::JoinHandle<()>,
+    Arc<flight_review_server::storage::FileStorage>,
+) {
     let port = free_port();
     let base_url = format!("http://127.0.0.1:{}", port);
 
@@ -59,7 +73,7 @@ async fn start_server() -> (String, tokio::task::JoinHandle<()>) {
 
     let state = Arc::new(flight_review_server::AppState {
         db,
-        storage,
+        storage: storage.clone(),
         v1_ulg_prefix: None,
         mapbox_token: None,
         http_client: reqwest::Client::new(),
@@ -88,7 +102,52 @@ async fn start_server() -> (String, tokio::task::JoinHandle<()>) {
     // Keep tmp_dir alive by leaking it (cleaned up on process exit)
     std::mem::forget(tmp_dir);
 
-    (base_url, handle)
+    (base_url, handle, storage)
+}
+
+#[tokio::test]
+async fn overview_svg_endpoint_serves_image_from_metadata_track() {
+    let (base_url, _handle, storage) = start_server_with_storage().await;
+    let client = reqwest::Client::new();
+    let log_id = uuid::Uuid::new_v4();
+
+    let metadata = serde_json::json!({
+        "analysis": {
+            "gps_track": [
+                {"lat_deg": 47.397742, "lon_deg": 8.545594, "mode_id": 1},
+                {"lat_deg": 47.398100, "lon_deg": 8.546000, "mode_id": 2},
+                {"lat_deg": 47.398400, "lon_deg": 8.545300, "mode_id": 3}
+            ]
+        }
+    });
+    storage
+        .put_file(
+            log_id,
+            "metadata.json",
+            bytes::Bytes::from(serde_json::to_vec(&metadata).unwrap()),
+        )
+        .await
+        .unwrap();
+
+    let resp = client
+        .get(format!("{}/api/logs/{}/overview.svg", base_url, log_id))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), 200);
+    assert_eq!(
+        resp.headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "image/svg+xml"
+    );
+    let svg = resp.text().await.unwrap();
+    assert!(svg.starts_with("<svg"));
+    assert!(svg.contains("<polyline"));
+    assert!(svg.contains("Flight Review"));
 }
 
 #[tokio::test]
@@ -121,7 +180,10 @@ async fn test_full_lifecycle() {
             "version field '{field}' missing or empty: {body:?}"
         );
     }
-    assert_eq!(body["px4_ulog"], "0.6.1", "px4-ulog version should match Cargo.lock");
+    assert_eq!(
+        body["px4_ulog"], "0.6.1",
+        "px4-ulog version should match Cargo.lock"
+    );
 
     // 2. Upload a log
     let fixture = fixture_path("sample.ulg");
@@ -187,7 +249,10 @@ async fn test_full_lifecycle() {
 
     // 5. Get metadata.json
     let resp = client
-        .get(format!("{}/api/logs/{}/data/metadata.json", base_url, log_id))
+        .get(format!(
+            "{}/api/logs/{}/data/metadata.json",
+            base_url, log_id
+        ))
         .send()
         .await
         .unwrap();
@@ -219,10 +284,7 @@ async fn test_full_lifecycle() {
 
     // 7. Get raw .ulg file
     let resp = client
-        .get(format!(
-            "{}/api/logs/{}/data/sample.ulg",
-            base_url, log_id
-        ))
+        .get(format!("{}/api/logs/{}/data/sample.ulg", base_url, log_id))
         .send()
         .await
         .unwrap();
@@ -244,10 +306,7 @@ async fn test_full_lifecycle() {
 
     // 9. Search filters
     let resp = client
-        .get(format!(
-            "{}/api/logs?sys_name=PX4&has_gps=false",
-            base_url
-        ))
+        .get(format!("{}/api/logs?sys_name=PX4&has_gps=false", base_url))
         .send()
         .await
         .unwrap();
@@ -258,10 +317,7 @@ async fn test_full_lifecycle() {
 
     // 10. Delete with wrong token — should fail
     let resp = client
-        .delete(format!(
-            "{}/api/logs/{}?token=wrongtoken",
-            base_url, log_id
-        ))
+        .delete(format!("{}/api/logs/{}?token=wrongtoken", base_url, log_id))
         .send()
         .await
         .unwrap();
