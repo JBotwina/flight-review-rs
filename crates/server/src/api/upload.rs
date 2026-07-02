@@ -7,6 +7,36 @@ use crate::extract::extract_search_fields;
 
 use super::ApiError;
 
+fn validate_upload_filename(filename: &str) -> Result<(), ApiError> {
+    if filename.to_ascii_lowercase().ends_with(".ulge") {
+        return Err(ApiError::BadRequest(
+            "encrypted .ulge uploads are not supported yet".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_upload_filename;
+
+    #[test]
+    fn rejects_encrypted_ulge_uploads() {
+        let err = validate_upload_filename("flight.ULGE").err();
+        match err {
+            Some(crate::api::ApiError::BadRequest(message)) => {
+                assert!(message.contains("encrypted .ulge uploads are not supported yet"));
+            }
+            _ => panic!(".ulge should be rejected with a bad request"),
+        }
+    }
+
+    #[test]
+    fn accepts_regular_ulg_uploads() {
+        assert!(validate_upload_filename("flight.ulg").is_ok());
+    }
+}
+
 pub async fn upload(
     State(state): State<Arc<crate::AppState>>,
     mut multipart: Multipart,
@@ -72,6 +102,8 @@ pub async fn upload(
     let (original_filename, data) = file_bytes.ok_or_else(|| {
         ApiError::BadRequest("missing 'file' field in multipart form".to_string())
     })?;
+
+    validate_upload_filename(&original_filename)?;
 
     let file_size = data.len() as i64;
 
