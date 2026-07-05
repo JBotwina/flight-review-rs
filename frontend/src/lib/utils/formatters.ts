@@ -1,4 +1,4 @@
-export function formatDuration(seconds: number | null): string {
+export function formatDuration(seconds: number | null | undefined): string {
   if (seconds == null) return '—';
   if (seconds < 60) return `${Math.round(seconds)}s`;
   if (seconds < 3600) {

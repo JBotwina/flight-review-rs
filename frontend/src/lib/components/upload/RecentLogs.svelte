@@ -1,30 +1,14 @@
 <script lang="ts">
-	import { listLogs } from '$lib/api';
+	import { createListLogs } from '$lib/generated/endpoints/logs/logs';
 	import type { LogRecord } from '$lib/types';
 	import { formatDuration, formatRelativeTime } from '$lib/utils/formatters';
 	import { getHardwareName } from '$lib/utils/hardwareNames';
 	import LoadingSpinner from '$lib/components/shared/LoadingSpinner.svelte';
 
-	let logs = $state<LogRecord[]>([]);
-	let loading = $state(true);
-	let error = $state('');
-
-	$effect(() => {
-		loadLogs();
-	});
-
-	async function loadLogs() {
-		loading = true;
-		error = '';
-		try {
-			const res = await listLogs({ page: 1, limit: 5 });
-			logs = res.logs;
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to load recent logs';
-		} finally {
-			loading = false;
-		}
-	}
+	const recentLogsQuery = createListLogs({ offset: 0, limit: 5 });
+	let logs = $derived<LogRecord[]>($recentLogsQuery.data?.logs ?? []);
+	let loading = $derived($recentLogsQuery.isPending);
+	let error = $derived($recentLogsQuery.error ? 'Failed to load recent logs' : '');
 
 	function vehicleIconPath(type: string | null | undefined): string {
 		switch (type?.toLowerCase()) {

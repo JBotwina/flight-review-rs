@@ -8,8 +8,9 @@
 
 use axum::Json;
 use serde::Serialize;
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct VersionInfo {
     /// HTTP server crate version.
     pub server: &'static str,
@@ -24,6 +25,14 @@ pub struct VersionInfo {
     pub build_time: &'static str,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/version",
+    tag = "Version",
+    responses(
+        (status = 200, description = "Build and dependency version information", body = VersionInfo)
+    )
+)]
 pub async fn version() -> Json<VersionInfo> {
     Json(VersionInfo {
         server: env!("CARGO_PKG_VERSION"),

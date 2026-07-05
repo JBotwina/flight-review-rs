@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { UploadResponse } from '$lib/types';
+	import type { UploadResponse } from '$lib/generated/models';
 	import { formatDuration } from '$lib/utils/formatters';
 
 	let { result, onUploadAnother } = $props<{

@@ -1,16 +1,39 @@
 <script lang="ts">
-	import type { TrackPointCompact } from '$lib/api';
-	import { getTrack } from '$lib/api';
+	import { createQuery } from '@tanstack/svelte-query';
+	import { toStore } from 'svelte/store';
+	import { getGetTrackQueryOptions } from '$lib/generated/endpoints/logs/logs';
+	import type { TrackPointCompact } from '$lib/types';
 	import { getModeColor } from '$lib/utils/modeColors';
 
 	let { logId, width = 160, height = 100 }: { logId: string; width?: number; height?: number } = $props();
 
 	let canvas: HTMLCanvasElement | undefined = $state();
 	let sentinel: HTMLDivElement | undefined = $state();
-	let status = $state<'idle' | 'loading' | 'loaded' | 'no-gps' | 'error'>('idle');
+	let visible = $state(false);
+	let drawn = $state(false);
 
-	// Module-level cache shared across all instances
-	const trackCache = new Map<string, TrackPointCompact[]>();
+	const trackQuery = createQuery(
+		toStore(() =>
+			getGetTrackQueryOptions(logId, {
+				query: {
+					enabled: visible,
+					staleTime: 5 * 60_000,
+				},
+			})
+		)
+	);
+
+	let status = $derived<'idle' | 'loading' | 'loaded' | 'no-gps' | 'error'>(
+		!visible
+			? 'idle'
+			: $trackQuery.isPending
+				? 'loading'
+				: $trackQuery.isError
+					? 'error'
+					: ($trackQuery.data?.length ?? 0) < 2
+						? 'no-gps'
+						: 'loaded'
+	);
 
 	function drawTrack(ctx: CanvasRenderingContext2D, track: TrackPointCompact[], w: number, h: number) {
 		if (track.length < 2) return;
@@ -80,41 +103,12 @@
 		ctx.fill();
 	}
 
-	async function loadAndDraw() {
-		if (status !== 'idle') return;
-		status = 'loading';
-		try {
-			let track = trackCache.get(logId);
-			if (!track) {
-				track = await getTrack(logId);
-				trackCache.set(logId, track);
-			}
-			if (track.length < 2) {
-				status = 'no-gps';
-				return;
-			}
-			if (canvas) {
-				const ctx = canvas.getContext('2d');
-				if (ctx) {
-					const dpr = window.devicePixelRatio || 1;
-					canvas.width = width * dpr;
-					canvas.height = height * dpr;
-					ctx.scale(dpr, dpr);
-					drawTrack(ctx, track, width, height);
-				}
-			}
-			status = 'loaded';
-		} catch {
-			status = 'error';
-		}
-	}
-
 	$effect(() => {
 		if (!sentinel) return;
 		const observer = new IntersectionObserver(
 			(entries) => {
 				if (entries[0]?.isIntersecting) {
-					loadAndDraw();
+					visible = true;
 					observer.disconnect();
 				}
 			},
@@ -122,6 +116,19 @@
 		);
 		observer.observe(sentinel);
 		return () => observer.disconnect();
+	});
+
+	$effect(() => {
+		const track = $trackQuery.data;
+		if (drawn || !canvas || !track || track.length < 2) return;
+		const ctx = canvas.getContext('2d');
+		if (!ctx) return;
+		const dpr = window.devicePixelRatio || 1;
+		canvas.width = width * dpr;
+		canvas.height = height * dpr;
+		ctx.scale(dpr, dpr);
+		drawTrack(ctx, track, width, height);
+		drawn = true;
 	});
 </script>
 

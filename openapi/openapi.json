@@ -1,0 +1,1994 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "flight-review-server",
+    "description": "Flight Review v2 — HTTP API server",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/logs": {
+      "get": {
+        "tags": [
+          "Logs"
+        ],
+        "summary": "GET /api/logs -- list with filters",
+        "operationId": "list_logs",
+        "parameters": [
+          {
+            "name": "sys_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ver_hw",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "include_private",
+            "in": "query",
+            "description": "If true, include private logs in results (default: only public)",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "description": "ISO-8601 date string lower bound on created_at",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "description": "ISO-8601 date string upper bound on created_at",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "flight_duration_min",
+            "in": "query",
+            "description": "Minimum flight duration in seconds",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "flight_duration_max",
+            "in": "query",
+            "description": "Maximum flight duration in seconds",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "ver_sw_release_str",
+            "in": "query",
+            "description": "Filter by software release version string (prefix match)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ver_sw",
+            "in": "query",
+            "description": "Filter by software git hash (exact match)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sys_uuid",
+            "in": "query",
+            "description": "Filter by system UUID (exact match)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "vehicle_type",
+            "in": "query",
+            "description": "Filter by vehicle type category (exact match)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "localization",
+            "in": "query",
+            "description": "Filter by localization source (substring match)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "vibration_status",
+            "in": "query",
+            "description": "Filter by vibration status (exact match)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "has_gps",
+            "in": "query",
+            "description": "Filter by GPS presence (lat IS NOT NULL)",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "location_name",
+            "in": "query",
+            "description": "Filter by location name (substring match)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort column and direction, e.g. \"created_at:desc\", \"flight_duration_s:asc\"",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "has_topic",
+            "in": "query",
+            "description": "Filter logs that contain this topic name",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "parameter",
+            "in": "query",
+            "description": "Filter by parameter \"name:value\" (e.g. \"EKF2_AID_MASK:24\")",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "description": "Filter by tag",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error_message",
+            "in": "query",
+            "description": "Filter by error message substring",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lat",
+            "in": "query",
+            "description": "Center latitude for geographic search",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "description": "Center longitude for geographic search",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "radius_km",
+            "in": "query",
+            "description": "Radius in km for geographic search",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "field_max",
+            "in": "query",
+            "description": "Filter: field max exceeds threshold. Format: \"topic.field:value\"",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "field_min",
+            "in": "query",
+            "description": "Filter: field min below threshold. Format: \"topic.field:value\"",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "diagnostic",
+            "in": "query",
+            "description": "Filter by diagnostic presence (e.g. \"motor_failure\")",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "diagnostic_severity",
+            "in": "query",
+            "description": "Filter by diagnostic severity (e.g. \"critical\")",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filtered and paginated log list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/logs/facets": {
+      "get": {
+        "tags": [
+          "Logs"
+        ],
+        "summary": "GET /api/logs/facets -- distinct filter values scoped to current filters",
+        "operationId": "list_facets",
+        "parameters": [
+          {
+            "name": "sys_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ver_hw",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "include_private",
+            "in": "query",
+            "description": "If true, include private logs in results (default: only public)",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "description": "ISO-8601 date string lower bound on created_at",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "description": "ISO-8601 date string upper bound on created_at",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "flight_duration_min",
+            "in": "query",
+            "description": "Minimum flight duration in seconds",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "flight_duration_max",
+            "in": "query",
+            "description": "Maximum flight duration in seconds",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "ver_sw_release_str",
+            "in": "query",
+            "description": "Filter by software release version string (prefix match)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ver_sw",
+            "in": "query",
+            "description": "Filter by software git hash (exact match)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sys_uuid",
+            "in": "query",
+            "description": "Filter by system UUID (exact match)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "vehicle_type",
+            "in": "query",
+            "description": "Filter by vehicle type category (exact match)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "localization",
+            "in": "query",
+            "description": "Filter by localization source (substring match)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "vibration_status",
+            "in": "query",
+            "description": "Filter by vibration status (exact match)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "has_gps",
+            "in": "query",
+            "description": "Filter by GPS presence (lat IS NOT NULL)",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "location_name",
+            "in": "query",
+            "description": "Filter by location name (substring match)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort column and direction, e.g. \"created_at:desc\", \"flight_duration_s:asc\"",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "has_topic",
+            "in": "query",
+            "description": "Filter logs that contain this topic name",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "parameter",
+            "in": "query",
+            "description": "Filter by parameter \"name:value\" (e.g. \"EKF2_AID_MASK:24\")",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "description": "Filter by tag",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error_message",
+            "in": "query",
+            "description": "Filter by error message substring",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lat",
+            "in": "query",
+            "description": "Center latitude for geographic search",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "description": "Center longitude for geographic search",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "radius_km",
+            "in": "query",
+            "description": "Radius in km for geographic search",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          {
+            "name": "field_max",
+            "in": "query",
+            "description": "Filter: field max exceeds threshold. Format: \"topic.field:value\"",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "field_min",
+            "in": "query",
+            "description": "Filter: field min below threshold. Format: \"topic.field:value\"",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "diagnostic",
+            "in": "query",
+            "description": "Filter by diagnostic presence (e.g. \"motor_failure\")",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "diagnostic_severity",
+            "in": "query",
+            "description": "Filter by diagnostic severity (e.g. \"critical\")",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Distinct values for browse filters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FacetsResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/logs/{id}": {
+      "get": {
+        "tags": [
+          "Logs"
+        ],
+        "summary": "GET /api/logs/:id -- single log metadata",
+        "operationId": "get_log",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Log UUID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Log metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogRecord"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Log not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Logs"
+        ],
+        "summary": "DELETE /api/logs/:id?token=<delete_token>",
+        "operationId": "delete_log",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Log UUID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Log deleted"
+          },
+          "403": {
+            "description": "Invalid delete token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Log not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/logs/{id}/data/{filename}": {
+      "get": {
+        "tags": [
+          "Logs"
+        ],
+        "summary": "GET /api/logs/:id/data/:filename -- serve Parquet/metadata files\nSupports HTTP Range requests for DuckDB-WASM compatibility.\nIf the file does not exist in v2 storage but a v1 ULG prefix is configured,\nattempts lazy conversion of the original .ulg file on first access.",
+        "operationId": "get_log_file",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Log UUID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "filename",
+            "in": "path",
+            "description": "Stored file name, e.g. metadata.json or a Parquet file",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stored JSON or binary log artifact",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Partial content for range requests",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid range request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "File not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/logs/{id}/track": {
+      "get": {
+        "tags": [
+          "Logs"
+        ],
+        "summary": "GET /api/logs/:id/track -- lightweight GPS track for thumbnails\nReturns a downsampled GPS track (max 100 points) for canvas rendering.\nMuch smaller than fetching the full metadata.json (~2KB vs ~200KB).",
+        "operationId": "get_track",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Log UUID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Downsampled GPS track",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TrackPointCompact"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Log data not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stats": {
+      "get": {
+        "tags": [
+          "Stats"
+        ],
+        "operationId": "get_stats",
+        "parameters": [
+          {
+            "name": "group_by",
+            "in": "query",
+            "description": "Column to group by (validated against allowlist in the handler).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "description": "Time period: \"7d\", \"30d\", \"90d\", \"1y\", \"all\".",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of groups to return.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "vehicle_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ver_hw",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ver_sw_release_str",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "vibration_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aggregated log statistics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid aggregation request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/upload": {
+      "post": {
+        "tags": [
+          "Upload"
+        ],
+        "operationId": "upload",
+        "requestBody": {
+          "description": "ULog upload plus optional metadata fields",
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Uploaded and converted log summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid upload request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/version": {
+      "get": {
+        "tags": [
+          "Version"
+        ],
+        "operationId": "version",
+        "responses": {
+          "200": {
+            "description": "Build and dependency version information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionInfo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DeleteParams": {
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "FacetsResponse": {
+        "type": "object",
+        "required": [
+          "ver_hw",
+          "vehicle_type",
+          "ver_sw_release_str",
+          "vibration_status",
+          "tags"
+        ],
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "vehicle_type": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ver_hw": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ver_sw_release_str": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "vibration_status": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "ListFilters": {
+        "type": "object",
+        "properties": {
+          "date_from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO-8601 date string lower bound on created_at"
+          },
+          "date_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO-8601 date string upper bound on created_at"
+          },
+          "diagnostic": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter by diagnostic presence (e.g. \"motor_failure\")"
+          },
+          "diagnostic_severity": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter by diagnostic severity (e.g. \"critical\")"
+          },
+          "error_message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter by error message substring"
+          },
+          "field_max": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter: field max exceeds threshold. Format: \"topic.field:value\""
+          },
+          "field_min": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter: field min below threshold. Format: \"topic.field:value\""
+          },
+          "flight_duration_max": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Maximum flight duration in seconds"
+          },
+          "flight_duration_min": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Minimum flight duration in seconds"
+          },
+          "has_gps": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Filter by GPS presence (lat IS NOT NULL)"
+          },
+          "has_topic": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter logs that contain this topic name"
+          },
+          "include_private": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "If true, include private logs in results (default: only public)"
+          },
+          "lat": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Center latitude for geographic search"
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "localization": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter by localization source (substring match)"
+          },
+          "location_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter by location name (substring match)"
+          },
+          "lon": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Center longitude for geographic search"
+          },
+          "offset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "parameter": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter by parameter \"name:value\" (e.g. \"EKF2_AID_MASK:24\")"
+          },
+          "radius_km": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Radius in km for geographic search"
+          },
+          "search": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sort": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Sort column and direction, e.g. \"created_at:desc\", \"flight_duration_s:asc\""
+          },
+          "sys_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sys_uuid": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter by system UUID (exact match)"
+          },
+          "tag": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter by tag"
+          },
+          "vehicle_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter by vehicle type category (exact match)"
+          },
+          "ver_hw": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ver_sw": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter by software git hash (exact match)"
+          },
+          "ver_sw_release_str": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter by software release version string (prefix match)"
+          },
+          "vibration_status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter by vibration status (exact match)"
+          }
+        }
+      },
+      "ListResponse": {
+        "type": "object",
+        "required": [
+          "logs",
+          "total"
+        ],
+        "properties": {
+          "logs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LogRecord"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "LogRecord": {
+        "type": "object",
+        "required": [
+          "id",
+          "filename",
+          "created_at",
+          "file_size",
+          "topic_count",
+          "is_public"
+        ],
+        "properties": {
+          "analysis_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Analysis version used when this log was last processed"
+          },
+          "battery_min_voltage": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Minimum battery cell voltage (V)"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Free text description of the flight"
+          },
+          "diagnostic_flags": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Comma-separated diagnostic IDs detected (e.g. \"motor_failure,gps_interference\")"
+          },
+          "error_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Number of error-level events/messages"
+          },
+          "feedback": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Free text pilot feedback/notes"
+          },
+          "file_size": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "flight_duration_s": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Flight duration in seconds"
+          },
+          "gps_max_eph": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Maximum GPS horizontal position error (m)"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "is_public": {
+            "type": "boolean",
+            "description": "Whether this log appears in public listings"
+          },
+          "lat": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "GPS first-fix latitude"
+          },
+          "localization_sources": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Comma-separated localization sources (e.g. \"gps,optical_flow,vision\")"
+          },
+          "location_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Human-readable location name"
+          },
+          "lon": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "GPS first-fix longitude"
+          },
+          "max_speed_m_s": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Maximum ground speed (m/s)"
+          },
+          "mission_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Mission type: \"survey\", \"inspection\", \"test\", \"recreational\""
+          },
+          "pilot_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pilot name"
+          },
+          "rating": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Flight quality rating 1-5"
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Upload source: \"web\", \"CI\", \"QGC\", \"API\""
+          },
+          "sys_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Vehicle name (from metadata sys_name)"
+          },
+          "sys_uuid": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "System UUID from parameters"
+          },
+          "tags": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Comma-separated tags"
+          },
+          "topic_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of topics"
+          },
+          "total_distance_m": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Total distance travelled (m)"
+          },
+          "vehicle_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Vehicle name/callsign"
+          },
+          "vehicle_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Vehicle type: \"multirotor\", \"fixedwing\", \"vtol\", \"rover\", \"other\""
+          },
+          "ver_hw": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Hardware version"
+          },
+          "ver_sw": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Software version tag (e.g. \"v1.14.3\")"
+          },
+          "ver_sw_release_str": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Software version string (human-readable)"
+          },
+          "vibration_status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Vibration quality: \"good\", \"warning\", \"critical\""
+          },
+          "video_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Link to flight video"
+          },
+          "warning_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Number of warning-level events/messages"
+          },
+          "wind_speed": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Wind conditions: \"calm\", \"breeze\", \"gale\", \"storm\""
+          }
+        }
+      },
+      "StatRow": {
+        "type": "object",
+        "required": [
+          "group",
+          "count"
+        ],
+        "properties": {
+          "avg_flight_duration_s": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "avg_max_speed": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "group": {
+            "type": "string"
+          },
+          "total_flight_hours": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "StatsParams": {
+        "type": "object",
+        "required": [
+          "group_by"
+        ],
+        "properties": {
+          "group_by": {
+            "type": "string",
+            "description": "Column to group by (validated against allowlist in the handler)."
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Maximum number of groups to return."
+          },
+          "period": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Time period: \"7d\", \"30d\", \"90d\", \"1y\", \"all\"."
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vehicle_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ver_hw": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ver_sw_release_str": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vibration_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "StatsResponse": {
+        "type": "object",
+        "required": [
+          "group_by",
+          "period",
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatRow"
+            }
+          },
+          "group_by": {
+            "type": "string"
+          },
+          "period": {
+            "type": "string"
+          }
+        }
+      },
+      "TrackPointCompact": {
+        "type": "object",
+        "required": [
+          "lat",
+          "lon",
+          "m"
+        ],
+        "properties": {
+          "lat": {
+            "type": "number",
+            "format": "double"
+          },
+          "lon": {
+            "type": "number",
+            "format": "double"
+          },
+          "m": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "UploadRequest": {
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "feedback": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "file": {
+            "type": "string",
+            "format": "binary"
+          },
+          "is_public": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "location_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mission_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pilot_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rating": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vehicle_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "video_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "wind_speed": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "UploadResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "filename",
+          "topic_count",
+          "is_public",
+          "delete_token",
+          "parquet_files"
+        ],
+        "properties": {
+          "delete_token": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "flight_duration_s": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "is_public": {
+            "type": "boolean"
+          },
+          "parquet_files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sys_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "topic_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ver_hw": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "VersionInfo": {
+        "type": "object",
+        "required": [
+          "server",
+          "converter",
+          "px4_ulog",
+          "git_sha",
+          "build_time"
+        ],
+        "properties": {
+          "build_time": {
+            "type": "string",
+            "description": "Server build time, ISO-8601 UTC (`unknown` if unavailable)."
+          },
+          "converter": {
+            "type": "string",
+            "description": "Converter/analysis library version."
+          },
+          "git_sha": {
+            "type": "string",
+            "description": "Short git SHA the server was built from (`-dirty` if the tree had\nuncommitted changes, `unknown` for non-git builds)."
+          },
+          "px4_ulog": {
+            "type": "string",
+            "description": "Resolved px4-ulog parser version."
+          },
+          "server": {
+            "type": "string",
+            "description": "HTTP server crate version."
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Health check"
+    },
+    {
+      "name": "Version",
+      "description": "Build and dependency versions"
+    },
+    {
+      "name": "Upload",
+      "description": "ULog uploads"
+    },
+    {
+      "name": "Logs",
+      "description": "Flight log listing, detail, files, and deletion"
+    },
+    {
+      "name": "Stats",
+      "description": "Aggregated flight log statistics"
+    }
+  ]
+}

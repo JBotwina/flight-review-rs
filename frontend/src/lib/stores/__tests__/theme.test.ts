@@ -6,9 +6,19 @@ vi.mock('$app/environment', () => ({ browser: true }));
 
 describe('darkMode store', () => {
 	beforeEach(() => {
+		const store = new Map<string, string>();
+		Object.defineProperty(window, 'localStorage', {
+			value: {
+				clear: () => store.clear(),
+				getItem: (key: string) => store.get(key) ?? null,
+				removeItem: (key: string) => store.delete(key),
+				setItem: (key: string, value: string) => store.set(key, value),
+			},
+			configurable: true,
+		});
 		// Reset DOM and localStorage
 		document.documentElement.classList.remove('dark');
-		localStorage.clear();
+		window.localStorage.clear();
 		// Re-import for fresh store each test
 		vi.resetModules();
 	});
@@ -26,7 +36,7 @@ describe('darkMode store', () => {
 	});
 
 	it('reads stored preference over system preference', async () => {
-		localStorage.setItem('theme', 'dark');
+		window.localStorage.setItem('theme', 'dark');
 		window.matchMedia = vi.fn().mockReturnValue({ matches: false });
 		const { darkMode } = await import('../theme');
 		expect(get(darkMode)).toBe(true);
@@ -40,12 +50,12 @@ describe('darkMode store', () => {
 		darkMode.toggle();
 
 		expect(get(darkMode)).toBe(true);
-		expect(localStorage.getItem('theme')).toBe('dark');
+		expect(window.localStorage.getItem('theme')).toBe('dark');
 		expect(document.documentElement.classList.contains('dark')).toBe(true);
 	});
 
 	it('toggle() switches from dark to light', async () => {
-		localStorage.setItem('theme', 'dark');
+		window.localStorage.setItem('theme', 'dark');
 		window.matchMedia = vi.fn().mockReturnValue({ matches: false });
 		const { darkMode } = await import('../theme');
 		expect(get(darkMode)).toBe(true);
@@ -53,7 +63,7 @@ describe('darkMode store', () => {
 		darkMode.toggle();
 
 		expect(get(darkMode)).toBe(false);
-		expect(localStorage.getItem('theme')).toBe('light');
+		expect(window.localStorage.getItem('theme')).toBe('light');
 		expect(document.documentElement.classList.contains('dark')).toBe(false);
 	});
 
@@ -63,12 +73,12 @@ describe('darkMode store', () => {
 
 		darkMode.set(true);
 		expect(get(darkMode)).toBe(true);
-		expect(localStorage.getItem('theme')).toBe('dark');
+		expect(window.localStorage.getItem('theme')).toBe('dark');
 		expect(document.documentElement.classList.contains('dark')).toBe(true);
 
 		darkMode.set(false);
 		expect(get(darkMode)).toBe(false);
-		expect(localStorage.getItem('theme')).toBe('light');
+		expect(window.localStorage.getItem('theme')).toBe('light');
 		expect(document.documentElement.classList.contains('dark')).toBe(false);
 	});
 });

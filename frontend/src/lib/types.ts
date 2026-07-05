@@ -1,32 +1,15 @@
-// --- Backend data types ---
+export type {
+	FacetsResponse as FilterFacets,
+	ListResponse,
+	LogRecord,
+	StatRow as StatsDataPoint,
+	StatsResponse,
+	TrackPointCompact,
+	UploadResponse,
+	VersionInfo,
+} from '$lib/generated/models';
 
-export interface LogRecord {
-  id: string;
-  filename: string;
-  created_at: string;
-  file_size: number;
-  sys_name: string | null;
-  ver_hw: string | null;
-  ver_sw_release_str: string | null;
-  flight_duration_s: number | null;
-  topic_count: number;
-  lat: number | null;
-  lon: number | null;
-  is_public: boolean;
-  description: string | null;
-  wind_speed: string | null;
-  rating: number | null;
-  feedback: string | null;
-  video_url: string | null;
-  source: string | null;
-  pilot_name: string | null;
-  vehicle_name: string | null;
-  tags: string | null;
-  location_name: string | null;
-  mission_type: string | null;
-  vehicle_type: string | null;
-}
-
+// Frontend browse state uses page numbers; the REST API uses offset + limit.
 export interface ListFilters {
   search?: string;
   sys_name?: string;
@@ -46,11 +29,6 @@ export interface ListFilters {
   limit: number;
 }
 
-export interface ListResponse {
-  logs: LogRecord[];
-  total: number;
-}
-
 export interface UploadOptions {
   description?: string;
   isPublic?: boolean;
@@ -64,28 +42,6 @@ export interface UploadOptions {
   tags?: string;
   locationName?: string;
   missionType?: string;
-}
-
-export interface UploadResponse {
-  id: string;
-  filename: string;
-  sys_name: string | null;
-  ver_hw: string | null;
-  flight_duration_s: number | null;
-  topic_count: number;
-  is_public: boolean;
-  delete_token: string;
-  parquet_files: string[];
-}
-
-/// Backend version info from GET /api/version. The frontend reports its own
-/// version separately (baked in at build time via Vite define).
-export interface VersionInfo {
-  server: string;
-  converter: string;
-  px4_ulog: string;
-  git_sha: string;
-  build_time: string;
 }
 
 // --- Metadata types ---
@@ -191,26 +147,10 @@ export interface TrackPoint {
   mode_id: number;
 }
 
-// --- Stats types ---
-
 export interface StatsFilters {
   vehicleType?: string;
   verHw?: string;
   source?: string;
-}
-
-export interface StatsResponse {
-  group_by: string;
-  period: string;
-  data: StatsDataPoint[];
-}
-
-export interface StatsDataPoint {
-  group: string;
-  count: number;
-  avg_flight_duration_s?: number;
-  total_flight_hours?: number;
-  avg_max_speed?: number;
 }
 
 export interface PlotConfig {

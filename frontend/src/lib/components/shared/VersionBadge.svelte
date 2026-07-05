@@ -1,7 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { getVersion } from '$lib/api';
-	import type { VersionInfo } from '$lib/types';
+	import { createVersion } from '$lib/generated/endpoints/version/version';
 
 	// Frontend version is baked in at build time (Vite define). Backend versions
 	// are fetched at runtime; they can differ since the two deploy separately.
@@ -11,18 +9,9 @@
 		build_time: __BUILD_TIME__,
 	};
 
-	let backend = $state<VersionInfo | null>(null);
-	let backendFailed = $state(false);
-
-	onMount(async () => {
-		try {
-			backend = await getVersion();
-		} catch {
-			// Server unreachable / older server without the endpoint — show the
-			// frontend version anyway, never break the nav.
-			backendFailed = true;
-		}
-	});
+	const versionQuery = createVersion({ query: { staleTime: 5 * 60_000, retry: 0 } });
+	let backend = $derived($versionQuery.data ?? null);
+	let backendFailed = $derived($versionQuery.isError);
 
 	function shortDate(iso: string): string {
 		if (!iso || iso === 'unknown') return 'unknown';

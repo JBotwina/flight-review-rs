@@ -1,6 +1,10 @@
-use axum::{extract::{Query, State}, Json};
+use axum::{
+    extract::{Query, State},
+    Json,
+};
 use serde::Serialize;
 use std::sync::Arc;
+use utoipa::ToSchema;
 
 use super::ApiError;
 use crate::db::{StatRow, StatsParams};
@@ -15,13 +19,24 @@ const ALLOWED_GROUP_BY: &[&str] = &[
     "mission_type",
 ];
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct StatsResponse {
     pub group_by: String,
     pub period: String,
     pub data: Vec<StatRow>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/stats",
+    tag = "Stats",
+    params(StatsParams),
+    responses(
+        (status = 200, description = "Aggregated log statistics", body = StatsResponse),
+        (status = 400, description = "Invalid aggregation request", body = crate::api::ErrorResponse),
+        (status = 500, description = "Server error", body = crate::api::ErrorResponse)
+    )
+)]
 pub async fn get_stats(
     State(state): State<Arc<crate::AppState>>,
     Query(params): Query<StatsParams>,
@@ -34,10 +49,7 @@ pub async fn get_stats(
         )));
     }
 
-    let period_str = params
-        .period
-        .clone()
-        .unwrap_or_else(|| "30d".to_string());
+    let period_str = params.period.clone().unwrap_or_else(|| "30d".to_string());
 
     let data = state.db.stats(&params).await?;
 

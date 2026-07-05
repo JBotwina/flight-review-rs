@@ -195,6 +195,8 @@ The `metadata.json` includes flight modes, stats, battery summary, GPS quality, 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/health` | Health check |
+| `GET` | `/api/openapi.json` | OpenAPI specification used by the typed frontend client |
+| `GET` | `/api/version` | Server, converter, parser, and build version information |
 | `POST` | `/api/upload` | Multipart upload -- accepts `.ulg` file + optional context fields |
 | `GET` | `/api/logs` | List/search logs (paginated, filtered by hardware, diagnostics, etc.) |
 | `GET` | `/api/logs/facets` | Distinct values for filterable fields (hardware, vehicle type, etc.) |
@@ -203,6 +205,10 @@ The `metadata.json` includes flight modes, stats, battery summary, GPS quality, 
 | `DELETE` | `/api/logs/:id?token=<token>` | Delete log (requires delete token from upload) |
 | `GET` | `/api/logs/:id/data/:filename` | Serve Parquet/JSON/ULG files with HTTP Range support |
 | `GET` | `/api/stats` | Aggregate statistics (upload counts, vehicle types, etc.) |
+
+The committed OpenAPI spec lives at `openapi/openapi.json`. Regenerate it with
+`cargo test -p flight-review-server export_openapi -- --nocapture`; the frontend
+Orval client is generated from that file with `cd frontend && npm run generate:api`.
 
 ## Tech Stack
 

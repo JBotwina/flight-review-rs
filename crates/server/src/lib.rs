@@ -2,6 +2,7 @@ pub mod api;
 pub mod db;
 pub mod extract;
 pub mod geocode;
+pub mod openapi;
 pub mod storage;
 
 use axum::{
@@ -30,6 +31,7 @@ pub struct AppState {
 pub fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", get(api::health::health))
+        .route("/api/openapi.json", get(openapi::openapi_json))
         .route("/api/version", get(api::version::version))
         .route(
             "/api/upload",

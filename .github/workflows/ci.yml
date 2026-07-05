@@ -55,3 +55,46 @@ jobs:
 
       - name: Run integration test
         run: cargo test -p flight-review-server --test integration -- --nocapture
+
+  frontend:
+    name: Frontend and API Codegen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          lfs: true  # fixtures are stored via Git LFS
+
+      - run: rustup show  # installs version from rust-toolchain.toml
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Export OpenAPI spec
+        run: cargo test -p flight-review-server export_openapi -- --nocapture
+
+      - name: Verify openapi.json is committed
+        run: git diff --exit-code openapi/openapi.json
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Generate Orval client
+        working-directory: frontend
+        run: npm run generate:api
+
+      - name: Verify generated client is committed
+        run: git diff --exit-code frontend/src/lib/generated/
+
+      - name: Typecheck
+        working-directory: frontend
+        run: npm run check
+
+      - name: Test
+        working-directory: frontend
+        run: npm test

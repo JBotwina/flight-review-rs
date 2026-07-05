@@ -3,6 +3,7 @@ pub mod sqlite;
 
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 // ---------------------------------------------------------------------------
@@ -124,7 +125,7 @@ impl QueryBuilder {
 // LogRecord
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct LogRecord {
     pub id: Uuid,
     pub filename: String,
@@ -148,6 +149,7 @@ pub struct LogRecord {
     pub is_public: bool,
     /// Delete token (32-char hex). Required to delete a log.
     #[serde(skip_serializing)]
+    #[schema(ignore)]
     pub delete_token: String,
     /// Free text description of the flight
     pub description: Option<String>,
@@ -201,7 +203,8 @@ pub struct LogRecord {
     pub diagnostic_flags: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
 pub struct ListFilters {
     // Existing filters
     pub sys_name: Option<String>,
@@ -267,13 +270,13 @@ pub struct ListFilters {
     pub diagnostic_severity: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct ListResponse {
     pub logs: Vec<LogRecord>,
     pub total: i64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct FacetsResponse {
     pub ver_hw: Vec<String>,
     pub vehicle_type: Vec<String>,
@@ -286,7 +289,8 @@ pub struct FacetsResponse {
 // StatsParams / StatRow – used by the aggregation endpoint
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
 pub struct StatsParams {
     /// Column to group by (validated against allowlist in the handler).
     pub group_by: String,
@@ -302,7 +306,7 @@ pub struct StatsParams {
     pub vibration_status: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct StatRow {
     pub group: String,
     pub count: i64,
@@ -337,12 +341,28 @@ pub trait LogStore: Send + Sync {
     async fn stats(&self, params: &StatsParams) -> Result<Vec<StatRow>, DbError>;
 
     // Junction table methods
-    async fn insert_parameters(&self, log_id: Uuid, params: &[(String, f64)]) -> Result<(), DbError>;
+    async fn insert_parameters(
+        &self,
+        log_id: Uuid,
+        params: &[(String, f64)],
+    ) -> Result<(), DbError>;
     async fn insert_topics(&self, log_id: Uuid, topics: &[(String, i32)]) -> Result<(), DbError>;
     async fn insert_tags(&self, log_id: Uuid, tags: &[String]) -> Result<(), DbError>;
-    async fn insert_errors(&self, log_id: Uuid, errors: &[(String, String, Option<u64>)]) -> Result<(), DbError>;
-    async fn insert_field_stats(&self, log_id: Uuid, stats: &[FieldStatRecord]) -> Result<(), DbError>;
-    async fn insert_diagnostics(&self, log_id: Uuid, diagnostics: &[DiagnosticRecord]) -> Result<(), DbError>;
+    async fn insert_errors(
+        &self,
+        log_id: Uuid,
+        errors: &[(String, String, Option<u64>)],
+    ) -> Result<(), DbError>;
+    async fn insert_field_stats(
+        &self,
+        log_id: Uuid,
+        stats: &[FieldStatRecord],
+    ) -> Result<(), DbError>;
+    async fn insert_diagnostics(
+        &self,
+        log_id: Uuid,
+        diagnostics: &[DiagnosticRecord],
+    ) -> Result<(), DbError>;
     async fn delete_junction_data(&self, log_id: Uuid) -> Result<(), DbError>;
 }
 
@@ -364,7 +384,12 @@ pub fn bounding_box(lat: f64, lon: f64, radius_km: f64) -> (f64, f64, f64, f64) 
     } else {
         radius_km / (111.32 * cos_lat)
     };
-    (lat - lat_delta, lat + lat_delta, lon - lon_delta, lon + lon_delta)
+    (
+        lat - lat_delta,
+        lat + lat_delta,
+        lon - lon_delta,
+        lon + lon_delta,
+    )
 }
 
 /// A record for the `log_diagnostics` junction table.

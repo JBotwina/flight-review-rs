@@ -49,14 +49,14 @@
 		return items;
 	});
 
-	function formatDuration(seconds: number | undefined): string {
+	function formatDuration(seconds: number | null | undefined): string {
 		if (seconds == null) return '-';
 		if (seconds < 60) return `${seconds.toFixed(0)}s`;
 		if (seconds < 3600) return `${(seconds / 60).toFixed(1)}m`;
 		return `${(seconds / 3600).toFixed(1)}h`;
 	}
 
-	function formatHours(hours: number | undefined): string {
+	function formatHours(hours: number | null | undefined): string {
 		if (hours == null) return '-';
 		return `${hours.toFixed(1)}h`;
 	}

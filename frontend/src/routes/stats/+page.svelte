@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { getStats } from '$lib/api';
+	import { createQuery, keepPreviousData } from '@tanstack/svelte-query';
+	import { toStore } from 'svelte/store';
+	import { getGetStatsQueryOptions } from '$lib/generated/endpoints/stats/stats';
+	import type { GetStatsParams } from '$lib/generated/models';
 	import type { StatsFilters, StatsDataPoint } from '$lib/types';
 	import StatsFilterPanel from '$lib/components/stats/StatsFilterPanel.svelte';
 	import KpiCards from '$lib/components/stats/KpiCards.svelte';
@@ -17,24 +20,6 @@
 		verHw: page.url.searchParams.get('ver_hw') || undefined,
 		source: page.url.searchParams.get('source') || undefined,
 	}));
-
-	// Data state
-	let hwData = $state<StatsDataPoint[]>([]);
-	let vehicleData = $state<StatsDataPoint[]>([]);
-	let durationData = $state<StatsDataPoint[]>([]);
-	let airframeData = $state<StatsDataPoint[]>([]);
-
-	let totalLogs = $state(0);
-	let flightHours = $state(0);
-	let uniqueVehicles = $state(0);
-	let todayUploads = $state(0);
-
-	let loadingHw = $state(true);
-	let loadingVehicle = $state(true);
-	let loadingDuration = $state(true);
-	let loadingAirframe = $state(true);
-
-	let error = $state<string | null>(null);
 
 	function updateUrl(updates: Record<string, string | undefined>) {
 		const params = new URLSearchParams(page.url.searchParams);
@@ -69,78 +54,52 @@
 		updateUrl({ vehicle_type: airframe });
 	}
 
-	function buildParams(groupBy: string) {
+	function buildParams(groupBy: string, limit?: number): GetStatsParams {
 		return {
 			group_by: groupBy,
 			period: period === 'all' ? undefined : period,
+			limit,
 			vehicle_type: filters.vehicleType,
 			ver_hw: filters.verHw,
 			source: filters.source,
 		};
 	}
 
-	// Fetch all stats data in parallel when filters change
-	$effect(() => {
-		const _period = period;
-		const _filters = filters;
+	const queryOptions = { placeholderData: keepPreviousData };
+	const hwQuery = createQuery(
+		toStore(() => getGetStatsQueryOptions(buildParams('ver_hw', 15), { query: queryOptions }))
+	);
+	const vehicleQuery = createQuery(
+		toStore(() => getGetStatsQueryOptions(buildParams('vehicle_type'), { query: queryOptions }))
+	);
+	const durationQuery = createQuery(
+		toStore(() => getGetStatsQueryOptions(buildParams('mission_type'), { query: queryOptions }))
+	);
+	const airframeQuery = createQuery(
+		toStore(() => getGetStatsQueryOptions(buildParams('sys_name', 25), { query: queryOptions }))
+	);
 
-		error = null;
-		loadingHw = true;
-		loadingVehicle = true;
-		loadingDuration = true;
-		loadingAirframe = true;
+	let hwData = $derived<StatsDataPoint[]>($hwQuery.data?.data ?? []);
+	let vehicleData = $derived<StatsDataPoint[]>($vehicleQuery.data?.data ?? []);
+	let durationData = $derived<StatsDataPoint[]>(
+		$durationQuery.isError ? [] : ($durationQuery.data?.data ?? [])
+	);
+	let airframeData = $derived<StatsDataPoint[]>($airframeQuery.data?.data ?? []);
 
-		// Hardware stats
-		getStats({ ...buildParams('ver_hw'), limit: 15 })
-			.then((res) => {
-				hwData = res.data;
-				// Compute KPIs from hardware data (total across all groups)
-				totalLogs = res.data.reduce((s, d) => s + d.count, 0);
-				flightHours = res.data.reduce((s, d) => s + (d.total_flight_hours ?? 0), 0);
-				uniqueVehicles = res.data.length;
-				loadingHw = false;
-			})
-			.catch((err: Error) => {
-				error = err.message || 'Failed to load hardware stats';
-				loadingHw = false;
-			});
+	let totalLogs = $derived(hwData.reduce((s, d) => s + d.count, 0));
+	let flightHours = $derived(hwData.reduce((s, d) => s + (d.total_flight_hours ?? 0), 0));
+	let uniqueVehicles = $derived(hwData.length);
+	let todayUploads = $derived(airframeData.reduce((s, d) => s + d.count, 0));
 
-		// Vehicle type stats
-		getStats(buildParams('vehicle_type'))
-			.then((res) => {
-				vehicleData = res.data;
-				loadingVehicle = false;
-			})
-			.catch((err: Error) => {
-				error = err.message || 'Failed to load vehicle type stats';
-				loadingVehicle = false;
-			});
-
-		// Duration distribution — use mission_type as a proxy since duration_bucket isn't a valid group_by
-		getStats(buildParams('mission_type'))
-			.then((res) => {
-				durationData = res.data;
-				loadingDuration = false;
-			})
-			.catch((err: Error) => {
-				// Non-critical, just hide the chart
-				durationData = [];
-				loadingDuration = false;
-			});
-
-		// Airframe stats
-		getStats({ ...buildParams('sys_name'), limit: 25 })
-			.then((res) => {
-				airframeData = res.data;
-				// Today's uploads from a separate field if available
-				todayUploads = res.data.length > 0 ? res.data.reduce((s, d) => s + d.count, 0) : 0;
-				loadingAirframe = false;
-			})
-			.catch((err: Error) => {
-				error = err.message || 'Failed to load airframe stats';
-				loadingAirframe = false;
-			});
-	});
+	let loadingHw = $derived($hwQuery.isPending);
+	let loadingVehicle = $derived($vehicleQuery.isPending);
+	let loadingDuration = $derived($durationQuery.isPending);
+	let loadingAirframe = $derived($airframeQuery.isPending);
+	let error = $derived(
+		$hwQuery.error || $vehicleQuery.error || $airframeQuery.error
+			? 'Failed to load statistics'
+			: null
+	);
 </script>
 
 <svelte:head>

@@ -7,6 +7,7 @@ use axum::{
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::extract::extract_search_fields;
@@ -14,6 +15,16 @@ use crate::extract::extract_search_fields;
 use super::ApiError;
 
 /// GET /api/logs -- list with filters
+#[utoipa::path(
+    get,
+    path = "/api/logs",
+    tag = "Logs",
+    params(crate::db::ListFilters),
+    responses(
+        (status = 200, description = "Filtered and paginated log list", body = crate::db::ListResponse),
+        (status = 500, description = "Server error", body = crate::api::ErrorResponse)
+    )
+)]
 pub async fn list_logs(
     State(state): State<Arc<crate::AppState>>,
     Query(filters): Query<crate::db::ListFilters>,
@@ -23,6 +34,16 @@ pub async fn list_logs(
 }
 
 /// GET /api/logs/facets -- distinct filter values scoped to current filters
+#[utoipa::path(
+    get,
+    path = "/api/logs/facets",
+    tag = "Logs",
+    params(crate::db::ListFilters),
+    responses(
+        (status = 200, description = "Distinct values for browse filters", body = crate::db::FacetsResponse),
+        (status = 500, description = "Server error", body = crate::api::ErrorResponse)
+    )
+)]
 pub async fn list_facets(
     State(state): State<Arc<crate::AppState>>,
     Query(filters): Query<crate::db::ListFilters>,
@@ -32,6 +53,19 @@ pub async fn list_facets(
 }
 
 /// GET /api/logs/:id -- single log metadata
+#[utoipa::path(
+    get,
+    path = "/api/logs/{id}",
+    tag = "Logs",
+    params(
+        ("id" = Uuid, Path, description = "Log UUID")
+    ),
+    responses(
+        (status = 200, description = "Log metadata", body = crate::db::LogRecord),
+        (status = 404, description = "Log not found", body = crate::api::ErrorResponse),
+        (status = 500, description = "Server error", body = crate::api::ErrorResponse)
+    )
+)]
 pub async fn get_log(
     State(state): State<Arc<crate::AppState>>,
     Path(id): Path<Uuid>,
@@ -42,12 +76,28 @@ pub async fn get_log(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
 pub struct DeleteParams {
     pub token: String,
 }
 
 /// DELETE /api/logs/:id?token=<delete_token>
+#[utoipa::path(
+    delete,
+    path = "/api/logs/{id}",
+    tag = "Logs",
+    params(
+        ("id" = Uuid, Path, description = "Log UUID"),
+        DeleteParams
+    ),
+    responses(
+        (status = 204, description = "Log deleted"),
+        (status = 403, description = "Invalid delete token", body = crate::api::ErrorResponse),
+        (status = 404, description = "Log not found", body = crate::api::ErrorResponse),
+        (status = 500, description = "Server error", body = crate::api::ErrorResponse)
+    )
+)]
 pub async fn delete_log(
     State(state): State<Arc<crate::AppState>>,
     Path(id): Path<Uuid>,
@@ -70,6 +120,19 @@ pub async fn delete_log(
 /// GET /api/logs/:id/track -- lightweight GPS track for thumbnails
 /// Returns a downsampled GPS track (max 100 points) for canvas rendering.
 /// Much smaller than fetching the full metadata.json (~2KB vs ~200KB).
+#[utoipa::path(
+    get,
+    path = "/api/logs/{id}/track",
+    tag = "Logs",
+    params(
+        ("id" = Uuid, Path, description = "Log UUID")
+    ),
+    responses(
+        (status = 200, description = "Downsampled GPS track", body = Vec<TrackPointCompact>),
+        (status = 404, description = "Log data not found", body = crate::api::ErrorResponse),
+        (status = 500, description = "Server error", body = crate::api::ErrorResponse)
+    )
+)]
 pub async fn get_track(
     State(state): State<Arc<crate::AppState>>,
     Path(id): Path<Uuid>,
@@ -123,7 +186,7 @@ pub async fn get_track(
     Ok(Json(sampled))
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, ToSchema)]
 pub struct TrackPointCompact {
     pub lat: f64,
     pub lon: f64,
@@ -134,6 +197,22 @@ pub struct TrackPointCompact {
 /// Supports HTTP Range requests for DuckDB-WASM compatibility.
 /// If the file does not exist in v2 storage but a v1 ULG prefix is configured,
 /// attempts lazy conversion of the original .ulg file on first access.
+#[utoipa::path(
+    get,
+    path = "/api/logs/{id}/data/{filename}",
+    tag = "Logs",
+    params(
+        ("id" = Uuid, Path, description = "Log UUID"),
+        ("filename" = String, Path, description = "Stored file name, e.g. metadata.json or a Parquet file")
+    ),
+    responses(
+        (status = 200, description = "Stored JSON or binary log artifact", content_type = "application/octet-stream", body = Vec<u8>),
+        (status = 206, description = "Partial content for range requests", content_type = "application/octet-stream", body = Vec<u8>),
+        (status = 400, description = "Invalid range request", body = crate::api::ErrorResponse),
+        (status = 404, description = "File not found", body = crate::api::ErrorResponse),
+        (status = 500, description = "Server error", body = crate::api::ErrorResponse)
+    )
+)]
 pub async fn get_log_file(
     State(state): State<Arc<crate::AppState>>,
     Path((id, filename)): Path<(Uuid, String)>,
@@ -237,8 +316,7 @@ async fn lazy_convert(state: &crate::AppState, id: Uuid) -> Result<bool, ApiErro
     let file_size = ulg_data.len() as i64;
 
     // Write to temp file and convert
-    let tmp_dir =
-        tempfile::tempdir().map_err(|e| ApiError::Internal(format!("tempdir: {e}")))?;
+    let tmp_dir = tempfile::tempdir().map_err(|e| ApiError::Internal(format!("tempdir: {e}")))?;
     let input_path = tmp_dir.path().join("input.ulg");
     tokio::fs::write(&input_path, &ulg_data).await?;
 
@@ -276,10 +354,7 @@ async fn lazy_convert(state: &crate::AppState, id: Uuid) -> Result<bool, ApiErro
 
     // Copy the raw .ulg into the UUID directory so everything lives together
     let ulg_filename = format!("{}.ulg", id);
-    state
-        .storage
-        .put_file(id, &ulg_filename, ulg_data)
-        .await?;
+    state.storage.put_file(id, &ulg_filename, ulg_data).await?;
 
     // Update the DB record with fields extracted from the conversion
     if let Some(mut record) = state.db.get(id).await? {
@@ -290,7 +365,10 @@ async fn lazy_convert(state: &crate::AppState, id: Uuid) -> Result<bool, ApiErro
             .ver_sw_release_str
             .clone()
             .or(record.ver_sw_release_str);
-        record.flight_duration_s = result.metadata.flight_duration_s.or(record.flight_duration_s);
+        record.flight_duration_s = result
+            .metadata
+            .flight_duration_s
+            .or(record.flight_duration_s);
         record.topic_count = result.metadata.topics.len() as i32;
         record.lat = result
             .metadata
@@ -330,13 +408,9 @@ async fn lazy_convert(state: &crate::AppState, id: Uuid) -> Result<bool, ApiErro
             if let (Some(lat_val), Some(lon_val), Some(token)) =
                 (record.lat, record.lon, state.mapbox_token.as_deref())
             {
-                if let Some(name) = crate::geocode::reverse_geocode(
-                    &state.http_client,
-                    token,
-                    lat_val,
-                    lon_val,
-                )
-                .await
+                if let Some(name) =
+                    crate::geocode::reverse_geocode(&state.http_client, token, lat_val, lon_val)
+                        .await
                 {
                     tracing::info!(log_id = %id, location = %name, "geocoded location (lazy)");
                     record.location_name = Some(name);
@@ -387,9 +461,7 @@ fn parse_byte_range(range_str: &str) -> Result<(u64, u64), ApiError> {
     let range_spec = &range_str[bytes_prefix.len()..];
     let parts: Vec<&str> = range_spec.splitn(2, '-').collect();
     if parts.len() != 2 {
-        return Err(ApiError::BadRequest(format!(
-            "invalid range: {range_str}"
-        )));
+        return Err(ApiError::BadRequest(format!("invalid range: {range_str}")));
     }
 
     let start: u64 = parts[0]

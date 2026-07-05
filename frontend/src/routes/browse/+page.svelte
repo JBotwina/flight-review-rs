@@ -1,8 +1,12 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { listLogs } from '$lib/api';
-	import type { ListFilters, ListResponse } from '$lib/types';
+	import { createQuery, keepPreviousData } from '@tanstack/svelte-query';
+	import { toStore } from 'svelte/store';
+	import { getListLogsQueryOptions } from '$lib/generated/endpoints/logs/logs';
+	import type { ListLogsParams } from '$lib/generated/models';
+	import { pageToOffset } from '$lib/api-helpers';
+	import type { ListFilters, LogRecord } from '$lib/types';
 	import SearchBar from '$lib/components/browse/SearchBar.svelte';
 	import AdvancedFilters from '$lib/components/browse/AdvancedFilters.svelte';
 	import ActiveFilters from '$lib/components/browse/ActiveFilters.svelte';
@@ -39,12 +43,32 @@
 		};
 	});
 
-	let logs = $state<import('$lib/types').LogRecord[]>([]);
-	let total = $state(0);
-	let loading = $state(true);
-	let error = $state<string | null>(null);
 	let sortField = $state<string | null>('created_at');
 	let sortDir = $state<'asc' | 'desc'>('desc');
+
+	let apiFilters = $derived.by((): ListLogsParams => {
+		const { page: pageNumber, limit, ...rest } = filters;
+		return {
+			...rest,
+			offset: pageToOffset(pageNumber, limit),
+			limit,
+		};
+	});
+
+	const logsQuery = createQuery(
+		toStore(() =>
+			getListLogsQueryOptions(apiFilters, {
+				query: {
+					placeholderData: keepPreviousData,
+				},
+			})
+		)
+	);
+
+	let logs = $derived<LogRecord[]>($logsQuery.data?.logs ?? []);
+	let total = $derived($logsQuery.data?.total ?? 0);
+	let loading = $derived($logsQuery.isPending);
+	let error = $derived($logsQuery.error ? 'Failed to load logs' : null);
 
 	// Sync sort state from URL
 	$effect(() => {
@@ -96,23 +120,6 @@
 		updateUrl({ sort: `${sortField}:${sortDir}` });
 	}
 
-	// Fetch data when filters change
-	$effect(() => {
-		const currentFilters = filters;
-		loading = true;
-		error = null;
-
-		listLogs(currentFilters)
-			.then((res: ListResponse) => {
-				logs = res.logs;
-				total = res.total;
-				loading = false;
-			})
-			.catch((err: Error) => {
-				error = err.message || 'Failed to load logs';
-				loading = false;
-			});
-	});
 </script>
 
 <svelte:head>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getFilterFacets, type FilterFacets } from '$lib/api';
+	import { createListFacets } from '$lib/generated/endpoints/logs/logs';
 	import type { ListFilters } from '$lib/types';
 	import Combobox from '$lib/components/shared/Combobox.svelte';
 	import px4Versions from '$lib/data/px4-versions.json';
@@ -10,8 +10,8 @@
 	} = $props();
 
 	let open = $state(false);
-	let facets = $state<FilterFacets | null>(null);
-	let facetsLoaded = $state(false);
+	const facetsQuery = createListFacets(undefined, { query: { staleTime: 5 * 60_000 } });
+	let facets = $derived($facetsQuery.data ?? null);
 
 	// Local input state for debounced text fields
 	let hwValue = $state('');
@@ -45,16 +45,6 @@
 		locationValue = filters.location_name ?? '';
 		durationMin = filters.flight_duration_min != null ? String(Math.round(filters.flight_duration_min / 60)) : '';
 		durationMax = filters.flight_duration_max != null ? String(Math.round(filters.flight_duration_max / 60)) : '';
-	});
-
-	// Fetch facets on mount
-	$effect(() => {
-		if (!facetsLoaded) {
-			facetsLoaded = true;
-			getFilterFacets()
-				.then((f) => { facets = f; })
-				.catch(() => { /* facets are optional, degrade gracefully */ });
-		}
 	});
 
 	function debouncedChange(field: keyof ListFilters, value: string, parseNum = false) {

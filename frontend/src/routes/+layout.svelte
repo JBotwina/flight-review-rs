@@ -3,11 +3,14 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
+	import { QueryClientProvider } from '@tanstack/svelte-query';
 	import { darkMode } from '$lib/stores/theme';
+	import { createAppQueryClient } from '$lib/query-client';
 	import NavBar from '$lib/components/shared/NavBar.svelte';
 	import '../app.css';
 
 	let { children } = $props<{ children: Snippet }>();
+	const queryClient = createAppQueryClient();
 
 	// Hide the main nav sidebar on log viewer pages — it has its own topic tree sidebar
 	let isLogViewer = $derived(page.url.pathname.startsWith('/log/'));
@@ -74,13 +77,15 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-{#if !isLogViewer}
-	<NavBar currentPath={page.url.pathname} />
-{/if}
+<QueryClientProvider client={queryClient}>
+	{#if !isLogViewer}
+		<NavBar currentPath={page.url.pathname} />
+	{/if}
 
-<main class="{isLogViewer ? '' : 'lg:pl-72 overflow-x-hidden'}">
-	{@render children()}
-</main>
+	<main class="{isLogViewer ? '' : 'lg:pl-72 overflow-x-hidden'}">
+		{@render children()}
+	</main>
+</QueryClientProvider>
 
 <!-- Keyboard shortcut help dialog -->
 {#if shortcutHelpOpen}

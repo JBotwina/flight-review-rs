@@ -5,9 +5,16 @@ pub mod upload;
 pub mod version;
 
 use axum::{http::StatusCode, response::IntoResponse, Json};
+use serde::Serialize;
+use utoipa::ToSchema;
 
 use crate::db::DbError;
 use crate::storage::StorageError;
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ErrorResponse {
+    pub error: String,
+}
 
 pub enum ApiError {
     NotFound,

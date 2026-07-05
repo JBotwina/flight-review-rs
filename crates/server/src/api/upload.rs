@@ -1,16 +1,64 @@
 use axum::{extract::Multipart, extract::State, Json};
 use bytes::Bytes;
+use serde::Serialize;
 use std::sync::Arc;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::extract::extract_search_fields;
 
 use super::ApiError;
 
+#[derive(Debug, ToSchema)]
+pub struct UploadRequest {
+    #[schema(value_type = String, format = Binary)]
+    pub file: Vec<u8>,
+    pub description: Option<String>,
+    pub is_public: Option<bool>,
+    pub wind_speed: Option<String>,
+    pub rating: Option<i32>,
+    pub feedback: Option<String>,
+    pub video_url: Option<String>,
+    pub source: Option<String>,
+    pub pilot_name: Option<String>,
+    pub vehicle_name: Option<String>,
+    pub tags: Option<String>,
+    pub location_name: Option<String>,
+    pub mission_type: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct UploadResponse {
+    pub id: Uuid,
+    pub filename: String,
+    pub sys_name: Option<String>,
+    pub ver_hw: Option<String>,
+    pub flight_duration_s: Option<f64>,
+    pub topic_count: i32,
+    pub is_public: bool,
+    pub delete_token: String,
+    pub parquet_files: Vec<String>,
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/upload",
+    tag = "Upload",
+    request_body(
+        content = UploadRequest,
+        content_type = "multipart/form-data",
+        description = "ULog upload plus optional metadata fields"
+    ),
+    responses(
+        (status = 200, description = "Uploaded and converted log summary", body = UploadResponse),
+        (status = 400, description = "Invalid upload request", body = crate::api::ErrorResponse),
+        (status = 500, description = "Server error", body = crate::api::ErrorResponse)
+    )
+)]
 pub async fn upload(
     State(state): State<Arc<crate::AppState>>,
     mut multipart: Multipart,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<Json<UploadResponse>, ApiError> {
     // 1. Extract the file and optional fields from multipart
     let mut file_bytes: Option<(String, Bytes)> = None;
     let mut is_public = false;
@@ -31,10 +79,7 @@ pub async fn upload(
         .map_err(|e| ApiError::BadRequest(format!("multipart error: {e}")))?
     {
         if field.name() == Some("file") {
-            let filename = field
-                .file_name()
-                .unwrap_or("upload.ulg")
-                .to_string();
+            let filename = field.file_name().unwrap_or("upload.ulg").to_string();
             let data = field
                 .bytes()
                 .await
@@ -125,11 +170,10 @@ pub async fn upload(
     // 5b. Reverse-geocode if location_name was not provided by the user
     let lat = result.metadata.gps_first_fix.as_ref().map(|g| g.lat_deg);
     let lon = result.metadata.gps_first_fix.as_ref().map(|g| g.lon_deg);
-    let user_gave_location = location_name
-        .as_ref()
-        .is_some_and(|s| !s.trim().is_empty());
+    let user_gave_location = location_name.as_ref().is_some_and(|s| !s.trim().is_empty());
     if !user_gave_location {
-        if let (Some(lat_val), Some(lon_val), Some(token)) = (lat, lon, state.mapbox_token.as_deref())
+        if let (Some(lat_val), Some(lon_val), Some(token)) =
+            (lat, lon, state.mapbox_token.as_deref())
         {
             match crate::geocode::reverse_geocode(&state.http_client, token, lat_val, lon_val).await
             {
@@ -216,7 +260,9 @@ pub async fn upload(
                     summary: d.summary.clone(),
                     timestamp_us: Some(d.timestamp_us as i64),
                     end_timestamp_us: match &d.kind {
-                        flight_review::diagnostics::AnomalyKind::Region { end_timestamp_us } => Some(*end_timestamp_us as i64),
+                        flight_review::diagnostics::AnomalyKind::Region { end_timestamp_us } => {
+                            Some(*end_timestamp_us as i64)
+                        }
                         flight_review::diagnostics::AnomalyKind::Point => None,
                     },
                     evidence: serde_json::to_string(&d.evidence).ok(),
@@ -237,17 +283,19 @@ pub async fn upload(
     );
 
     // 8. Return JSON with log id and metadata summary
-    Ok(Json(serde_json::json!({
-        "id": log_id,
-        "filename": record.filename,
-        "sys_name": record.sys_name,
-        "ver_hw": record.ver_hw,
-        "flight_duration_s": record.flight_duration_s,
-        "topic_count": record.topic_count,
-        "is_public": is_public,
-        "delete_token": delete_token,
-        "parquet_files": result.parquet_files.iter()
+    Ok(Json(UploadResponse {
+        id: log_id,
+        filename: record.filename,
+        sys_name: record.sys_name,
+        ver_hw: record.ver_hw,
+        flight_duration_s: record.flight_duration_s,
+        topic_count: record.topic_count,
+        is_public,
+        delete_token,
+        parquet_files: result
+            .parquet_files
+            .iter()
             .filter_map(|p| p.file_name().and_then(|n| n.to_str()).map(String::from))
             .collect::<Vec<_>>(),
-    })))
+    }))
 }

@@ -1,6 +1,8 @@
 <script lang="ts">
-	import type { UploadOptions, UploadResponse } from '$lib/types';
-	import { uploadLog } from '$lib/api';
+	import { useQueryClient } from '@tanstack/svelte-query';
+	import type { UploadResponse } from '$lib/generated/models';
+	import type { UploadOptions } from '$lib/types';
+	import { uploadLog } from '$lib/upload';
 	import ErrorBanner from '$lib/components/shared/ErrorBanner.svelte';
 	import UploadDropzone from '$lib/components/upload/UploadDropzone.svelte';
 	import UploadForm from '$lib/components/upload/UploadForm.svelte';
@@ -9,6 +11,8 @@
 	import RecentLogs from '$lib/components/upload/RecentLogs.svelte';
 
 	type UploadState = 'idle' | 'selected' | 'uploading' | 'done' | 'error';
+
+	const queryClient = useQueryClient();
 
 	let uploadState = $state<UploadState>('idle');
 	let selectedFile = $state<File | null>(null);
@@ -43,6 +47,7 @@
 
 		try {
 			result = await promise;
+			queryClient.invalidateQueries({ queryKey: ['/api/logs'] });
 			uploadState = 'done';
 		} catch (e) {
 			if (e instanceof Error && e.message === 'Network error') {

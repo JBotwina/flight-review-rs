@@ -1,9 +1,13 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
-	import { onMount, onDestroy, setContext } from 'svelte';
+	import { onDestroy, setContext } from 'svelte';
+	import { createQuery } from '@tanstack/svelte-query';
+	import { toStore } from 'svelte/store';
+	import { getGetLogQueryOptions } from '$lib/generated/endpoints/logs/logs';
 	import type { LogRecord, FlightMetadata } from '$lib/types';
-	import { getLog, getMetadata, ApiError } from '$lib/api';
+	import { getMetadata, getMetadataQueryKey } from '$lib/api-helpers';
+	import { ApiError } from '$lib/api-error';
 	import { terminateDuckDB } from '$lib/utils/duckdb';
 	import { timeRange } from '$lib/stores/plotSync';
 	import { builderOpen } from '$lib/stores/logViewer';
@@ -16,40 +20,39 @@
 
 	let { children } = $props<{ children: Snippet }>();
 
-	let logRecord = $state<LogRecord | null>(null);
-	let metadata = $state<FlightMetadata | null>(null);
-	let loading = $state(true);
-	let error = $state('');
+	let logId = $derived(page.params.id!);
+	const logQuery = createQuery(toStore(() => getGetLogQueryOptions(logId)));
+	const metadataQuery = createQuery(
+		toStore(() => ({
+			queryKey: getMetadataQueryKey(logId),
+			queryFn: () => getMetadata(logId),
+			enabled: !!logId,
+		}))
+	);
+
+	let logRecord = $derived<LogRecord | null>($logQuery.data ?? null);
+	let metadata = $derived<FlightMetadata | null>($metadataQuery.data ?? null);
+	let loading = $derived($logQuery.isPending || $metadataQuery.isPending);
+	let error = $derived.by(() => {
+		const err = $logQuery.error ?? $metadataQuery.error;
+		if (!err) return '';
+		if (err instanceof ApiError) {
+			return err.status === 404 ? 'Log not found.' : `Error: ${err.message}`;
+		}
+		return 'Failed to load log data.';
+	});
 
 	// Make metadata available to child routes via context
 	setContext('log-viewer', {
 		get metadata() { return metadata; },
 		get logRecord() { return logRecord; },
-		get logId() { return page.params.id; },
+		get logId() { return logId; },
 	});
 
-	async function loadData() {
-		loading = true;
-		error = '';
-		try {
-			const id = page.params.id!;
-			const [log, meta] = await Promise.all([getLog(id), getMetadata(id)]);
-			logRecord = log;
-			metadata = meta;
-		} catch (e) {
-			if (e instanceof ApiError) {
-				error = e.status === 404 ? 'Log not found.' : `Error: ${e.message}`;
-			} else {
-				error = 'Failed to load log data.';
-			}
-		} finally {
-			loading = false;
-		}
+	function loadData() {
+		$logQuery.refetch();
+		$metadataQuery.refetch();
 	}
-
-	onMount(() => {
-		loadData();
-	});
 
 	onDestroy(() => {
 		// Clear the per-log session cache so closed LogSessions don't linger
