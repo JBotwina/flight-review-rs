@@ -249,6 +249,8 @@ npm run dev
 
 The Vite dev server runs on `http://localhost:5173` and proxies all `/api` requests to the backend at `http://localhost:8080`. Open the Vite URL in the browser for development.
 
+For production-like local testing without Vite, build the frontend and pass `--frontend-dir frontend/build` to the server (see [Release Build](#release-build) and [Minimal (single binary)](#minimal-single-binary)).
+
 **Tests:**
 
 ```bash
@@ -304,7 +306,16 @@ Build the frontend for production:
 cd frontend && npm run build
 ```
 
-This produces static files in `frontend/build/` that can be served by the backend or any static file server.
+This produces static files in `frontend/build/`. Serve them from the same process as the API:
+
+```bash
+./target/release/flight-review-server serve \
+  --db sqlite:///data/flight-review.db \
+  --storage file:///data/files \
+  --frontend-dir frontend/build
+```
+
+When `--frontend-dir` is omitted, the server exposes API routes only.
 
 ### Feature Flags
 
@@ -351,6 +362,7 @@ Just run the binary with SQLite and local files -- no external services required
 ./flight-review-server serve \
   --db sqlite:///data/flight-review.db \
   --storage file:///data/files \
+  --frontend-dir frontend/build \
   --port 8080
 
 # Upload a log
@@ -365,15 +377,20 @@ curl http://localhost:8080/api/logs
 
 ### Docker
 
-The Dockerfile currently builds the backend only. The frontend must be built separately (`cd frontend && npm run build`) and served via a reverse proxy or integrated into the container build.
+The Dockerfile is a multi-stage build: Rust compiles the server and CLI, Node builds the SvelteKit frontend, and the runtime image serves both from a single container on port 8080.
 
 ```bash
-# Build
+# Build (frontend is compiled inside the image)
 docker build -t flight-review .
 
-# Run with local storage
-docker run -p 8080:8080 -v /data:/data flight-review
+# Optional: enable Mapbox maps in the viewer
+docker build --build-arg PUBLIC_MAPBOX_TOKEN=pk.your_token -t flight-review .
+
+# Run with persistent data
+docker run --rm -p 8080:8080 -v "$(pwd)/data:/data" flight-review
 ```
+
+The default command serves the UI and API together (`--frontend-dir /usr/share/flight-review/frontend`). Open `http://localhost:8080` in a browser.
 
 ### Production (AWS)
 
@@ -628,7 +645,6 @@ Shared DSP functions available in `dsp.rs`: `median_sample_rate`, `resample_unif
 - **User Accounts** -- optional authentication with email magic links, layered on top of the existing anonymous upload model
 - **PID Analysis API** -- server-side endpoint exposing the existing PID step response analysis for frontend consumption
 - **Dark Mode Polish** -- consistent dark mode across all pages (foundation exists but not fully polished)
-- **Frontend Production Build** -- integrate static frontend build into Docker image and server binary
 
 ## License
 
