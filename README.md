@@ -401,7 +401,8 @@ Postgres for the database, S3 for file storage, and optionally CloudFront for CD
 docker run -p 8080:8080 \
   flight-review serve \
   --db postgres://user:pass@host/flightreview \
-  --storage s3://my-bucket/logs
+  --storage s3://my-bucket/logs \
+  --frontend-dir /usr/share/flight-review/frontend
 
 # Full AWS example with credentials
 docker run -p 8080:8080 \
@@ -411,7 +412,8 @@ docker run -p 8080:8080 \
   flight-review serve \
   --db postgres://user:pass@rds-host.amazonaws.com/flightreview \
   --storage s3://px4-flight-review \
-  --v1-ulg-prefix flight_review/log_files
+  --v1-ulg-prefix flight_review/log_files \
+  --frontend-dir /usr/share/flight-review/frontend
 ```
 
 ## Migrate from v1

@@ -1,3 +1,4 @@
+use axum::{http::StatusCode, routing::any};
 use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -129,7 +130,10 @@ async fn run_server(config: ServeConfig) {
     let mut app = flight_review_server::build_router(state);
     if let Some(frontend_dir) = config.frontend_dir {
         let index = frontend_dir.join("index.html");
-        app = app.fallback_service(ServeDir::new(frontend_dir).fallback(ServeFile::new(index)));
+        app = app
+            .route("/api", any(api_not_found))
+            .route("/api/{*path}", any(api_not_found))
+            .fallback_service(ServeDir::new(frontend_dir).fallback(ServeFile::new(index)));
     }
 
     let addr = format!("{}:{}", config.host, config.port);
@@ -141,6 +145,10 @@ async fn run_server(config: ServeConfig) {
     axum::serve(listener, app)
         .await
         .expect("server error");
+}
+
+async fn api_not_found() -> StatusCode {
+    StatusCode::NOT_FOUND
 }
 
 /// Map v1 MavType string to a normalized vehicle type category.
