@@ -11,6 +11,8 @@ pub enum StorageError {
     ObjectStore(#[from] object_store::Error),
     #[error("unsupported storage URL: {0}")]
     UnsupportedUrl(String),
+    #[error("invalid storage configuration: {0}")]
+    InvalidConfig(String),
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -38,9 +40,12 @@ impl FileStorage {
                 let without_scheme = url.strip_prefix("s3://").unwrap();
                 let (bucket, prefix) =
                     without_scheme.split_once('/').unwrap_or((without_scheme, ""));
-                let s3 = object_store::aws::AmazonS3Builder::from_env()
-                    .with_bucket_name(bucket)
-                    .build()?;
+                if bucket.trim().is_empty() {
+                    return Err(StorageError::InvalidConfig(
+                        "S3 URL must include a bucket name".to_string(),
+                    ));
+                }
+                let s3 = build_s3_store(bucket)?;
                 if prefix.is_empty() {
                     Ok(Self {
                         store: Arc::new(s3),
@@ -145,5 +150,119 @@ impl FileStorage {
             self.store.delete(&meta.location).await?;
         }
         Ok(())
+    }
+}
+
+#[cfg(feature = "s3")]
+fn build_s3_store(bucket: &str) -> Result<object_store::aws::AmazonS3, StorageError> {
+    use object_store::aws::AmazonS3Builder;
+
+    let mut builder = AmazonS3Builder::from_env().with_bucket_name(bucket);
+
+    if let Some(value) = first_env(&["S3_ACCESS_KEY_ID", "ACCESS_KEY_ID"]) {
+        builder = builder.with_access_key_id(value);
+    }
+    if let Some(value) = first_env(&["S3_SECRET_ACCESS_KEY", "SECRET_ACCESS_KEY"]) {
+        builder = builder.with_secret_access_key(value);
+    }
+    if let Some(value) = first_env(&["S3_REGION", "REGION"]) {
+        builder = builder.with_region(value);
+    }
+
+    if let Some(endpoint) = first_env(&[
+        "S3_ENDPOINT",
+        "AWS_ENDPOINT_URL",
+        "AWS_ENDPOINT",
+        "ENDPOINT",
+    ]) {
+        let url_style = first_env(&["S3_URL_STYLE", "AWS_S3_URL_STYLE"])
+            .unwrap_or_else(|| default_url_style(&endpoint).to_string());
+        let virtual_hosted = match url_style.to_ascii_lowercase().as_str() {
+            "virtual" | "virtual-hosted" | "virtual_hosted" => true,
+            "path" | "path-style" | "path_style" => false,
+            other => {
+                return Err(StorageError::InvalidConfig(format!(
+                    "unsupported S3 URL style '{other}'; expected 'virtual' or 'path'"
+                )))
+            }
+        };
+        let endpoint = if virtual_hosted {
+            virtual_hosted_endpoint(&endpoint, bucket)?
+        } else {
+            endpoint
+        };
+        builder = builder
+            .with_endpoint(endpoint)
+            .with_virtual_hosted_style_request(virtual_hosted);
+    }
+
+    Ok(builder.build()?)
+}
+
+#[cfg(feature = "s3")]
+fn first_env(names: &[&str]) -> Option<String> {
+    names.iter().find_map(|name| {
+        std::env::var(name)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    })
+}
+
+#[cfg(feature = "s3")]
+fn default_url_style(endpoint: &str) -> &'static str {
+    if endpoint.contains("storage.railway.app") {
+        "virtual"
+    } else {
+        "path"
+    }
+}
+
+#[cfg(feature = "s3")]
+fn virtual_hosted_endpoint(endpoint: &str, bucket: &str) -> Result<String, StorageError> {
+    let mut url = reqwest::Url::parse(endpoint).map_err(|error| {
+        StorageError::InvalidConfig(format!("invalid S3 endpoint '{endpoint}': {error}"))
+    })?;
+    let host = url
+        .host_str()
+        .ok_or_else(|| StorageError::InvalidConfig("S3 endpoint has no host".to_string()))?;
+    let bucket_prefix = format!("{bucket}.");
+    if !host.starts_with(&bucket_prefix) {
+        let virtual_host = format!("{bucket}.{host}");
+        url.set_host(Some(&virtual_host)).map_err(|_| {
+            StorageError::InvalidConfig("could not construct virtual-hosted S3 URL".to_string())
+        })?;
+    }
+    Ok(url.as_str().trim_end_matches('/').to_string())
+}
+
+#[cfg(all(test, feature = "s3"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn converts_railway_base_endpoint_to_virtual_hosted_style() {
+        assert_eq!(
+            virtual_hosted_endpoint("https://storage.railway.app", "flight-data-abc123").unwrap(),
+            "https://flight-data-abc123.storage.railway.app"
+        );
+    }
+
+    #[test]
+    fn preserves_an_existing_virtual_hosted_endpoint() {
+        assert_eq!(
+            virtual_hosted_endpoint(
+                "https://flight-data-abc123.storage.railway.app",
+                "flight-data-abc123"
+            )
+            .unwrap(),
+            "https://flight-data-abc123.storage.railway.app"
+        );
+    }
+
+    #[test]
+    fn defaults_railway_to_virtual_and_other_providers_to_path_style() {
+        assert_eq!(default_url_style("https://storage.railway.app"), "virtual");
+        assert_eq!(default_url_style("https://minio.example.com"), "path");
     }
 }

@@ -75,6 +75,7 @@
 
 	const tabs = $derived([
 		{ label: 'Plots', href: '' },
+		{ label: 'AI Analysis', href: '/ai' },
 		...(hasGps ? [{ label: 'Map', href: '/map' }] : []),
 		{ label: 'Messages', href: '/messages' },
 		{ label: 'Parameters', href: '/parameters' },
@@ -86,6 +87,7 @@
 		const base = `/log/${page.params.id}`;
 		const suffix = path.slice(base.length);
 		if (suffix === '/map') return '/map';
+		if (suffix === '/ai') return '/ai';
 		if (suffix === '/messages') return '/messages';
 		if (suffix === '/parameters') return '/parameters';
 		if (suffix === '/system') return '/system';

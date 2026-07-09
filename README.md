@@ -24,7 +24,8 @@
   - [Storage Support](#storage-support)
 - [Deploy](#deploy)
   - [Minimal (single binary)](#minimal-single-binary)
-  - [Docker](#docker)
+  - [Docker Compose](#docker-compose)
+  - [Railway](#railway)
   - [Production (AWS)](#production-aws)
 - [Migrate from v1](#migrate-from-v1)
 - [CLI](#cli)
@@ -37,14 +38,14 @@
 
 ## Introduction
 
-Flight Review v2 is a complete rewrite of [PX4 Flight Review](https://github.com/PX4/flight_review) in Rust. It replaces the "parse every time you view" model with a **parse-once-store-review** architecture: ULog files are converted to per-topic [Parquet](https://parquet.apache.org/) files and a rich metadata JSON at upload time, then served as static files for client-side analysis via [DuckDB](https://duckdb.org/)-WASM. The frontend is a SvelteKit single-page application that queries Parquet files directly via DuckDB-WASM in the browser. The result is sub-second log viewing with zero server-side compute, support for SQLite or Postgres, and local filesystem or S3 storage -- deployable as a single binary or a Docker container.
+Flight Review v2 is a complete rewrite of [PX4 Flight Review](https://github.com/PX4/flight_review) in Rust. It replaces the "parse every time you view" model with a **parse-once-store-review** architecture: ULog files are converted to per-topic [Parquet](https://parquet.apache.org/) files and a rich metadata JSON at upload time, then served as static files for client-side analysis via [DuckDB](https://duckdb.org/)-WASM. The Rust upload service can also send a bounded projection of its deterministic diagnostics to a user-selected [OpenRouter](https://openrouter.ai/) model, producing a saved, evidence-backed flight debrief. The frontend is a SvelteKit single-page application that queries Parquet files directly via DuckDB-WASM in the browser.
 
 ## Architecture
 
 ### Upload Workflow
 
 ```
-Upload .ulg --> Rust converter --> Per-topic Parquet + metadata.json --> Storage
+Upload .ulg --> Rust converter --> Parquet + metadata.json --> OpenRouter debrief --> Storage
 ```
 
 At upload time the server parses the ULog file once, writes compressed Parquet files (one per topic) and a `metadata.json` containing all extracted metadata and flight analysis results. From that point on the browser queries Parquet directly via DuckDB-WASM and HTTP Range requests -- the server never re-parses the log.
@@ -181,6 +182,7 @@ All files live under a single UUID directory:
 ```
 <uuid>/
 ├── metadata.json           # Metadata + flight analysis + diagnostics
+├── ai-analysis.json        # Latest OpenRouter flight debrief (when configured)
 ├── <uuid>.ulg              # Original upload
 ├── vehicle_attitude.parquet
 ├── sensor_combined.parquet
@@ -203,6 +205,26 @@ The `metadata.json` includes flight modes, stats, battery summary, GPS quality, 
 | `DELETE` | `/api/logs/:id?token=<token>` | Delete log (requires delete token from upload) |
 | `GET` | `/api/logs/:id/data/:filename` | Serve Parquet/JSON/ULG files with HTTP Range support |
 | `GET` | `/api/stats` | Aggregate statistics (upload counts, vehicle types, etc.) |
+| `GET` | `/api/ai/models` | Models available to the configured OpenRouter key |
+| `GET` | `/api/ai/balance` | Safe key-level spending limit and usage totals (never returns key identity) |
+| `GET` | `/api/logs/:id/ai-analysis` | Read the latest saved AI flight debrief |
+| `POST` | `/api/logs/:id/ai-analysis` | Generate or replace a debrief with `{ "model": "provider/model" }` |
+
+### AI analysis
+
+AI analysis is owned by the Rust API; the OpenRouter key is never sent to the browser. During upload, the deterministic converter runs first and the log is durably stored. The server then sends OpenRouter a bounded evidence packet containing flight modes, statistics, diagnostics, field summaries, parameter changes, and logged messages. Raw ULog samples, the GPS track, exact coordinates, raw parameters, and the vehicle UUID are excluded.
+
+If OpenRouter fails, the upload still succeeds and the UI offers a retry from the **AI Analysis** tab. Choosing another model regenerates `ai-analysis.json` without changing the deterministic analysis. The UI also shows the configured key's remaining spending limit and usage; OpenRouter keys without a limit are shown as unlimited. The response is an engineering aid and is not an airworthiness determination.
+
+Configuration:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENROUTER_API_KEY` | unset | Enables model discovery and AI analysis |
+| `OPENROUTER_DEFAULT_MODEL` | `openrouter/auto` | Model used when an uploader does not choose one |
+| `OPENROUTER_APP_NAME` | `PX4 Flight Review` | OpenRouter attribution title |
+| `OPENROUTER_SITE_URL` | unset | Optional OpenRouter attribution URL |
+| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | Override for testing or a compatible gateway |
 
 ## Tech Stack
 
@@ -292,6 +314,22 @@ Key environment variables:
 | `VERIFY` | `true` | Verify each file with `ulog-convert` before uploading |
 | `MIN_VERSION` | `v1.14` | Minimum PX4 version |
 
+Production and Compose deployments can also seed themselves from
+[`seed/logs.json`](seed/logs.json). The manifest pins the five public examples
+used by this project by URL and SHA-256 instead of embedding roughly 268 MB of
+binary data in the Docker image. Set `SEED_LOGS=true` and the container will:
+
+1. wait for its own `/health` endpoint;
+2. check the database for each exact source filename;
+3. download and verify only missing ULogs; and
+4. pass them through `/api/upload`, which populates the database, local or S3
+   storage, diagnostics, and AI analysis.
+
+The pass runs after every start but is idempotent. Existing examples are
+skipped, a deleted example is restored on the next start, and failures do not
+make the application unhealthy. Set `SEED_LOGS=false` to opt out or
+`SEED_LOGS_PUBLIC=false` to keep newly seeded examples out of public listings.
+
 ### Release Build
 
 ```bash
@@ -304,7 +342,18 @@ Build the frontend for production:
 cd frontend && npm run build
 ```
 
-This produces static files in `frontend/build/` that can be served by the backend or any static file server.
+This produces static files in `frontend/build/`. For production-like local
+testing, serve the SPA and API from the Rust process:
+
+```bash
+./target/release/flight-review-server serve \
+  --db sqlite:///data/flight-review.db \
+  --storage file:///data/files \
+  --frontend-dir frontend/build
+```
+
+When `--frontend-dir` is omitted, the server exposes API routes only. The
+production Docker image builds and bundles the frontend automatically.
 
 ### Feature Flags
 
@@ -337,7 +386,8 @@ Both backends auto-create the schema on startup.
 ### Storage Support
 
 - **Local filesystem** (`file:///path`) -- simplest, no cloud needed
-- **Amazon S3** (`s3://bucket/prefix`) -- production, scalable, integrates with CloudFront
+- **S3-compatible storage** (`s3://bucket/prefix`) -- Amazon S3, Railway Buckets,
+  MinIO, and compatible providers
 
 ## Deploy
 
@@ -351,6 +401,7 @@ Just run the binary with SQLite and local files -- no external services required
 ./flight-review-server serve \
   --db sqlite:///data/flight-review.db \
   --storage file:///data/files \
+  --frontend-dir frontend/build \
   --port 8080
 
 # Upload a log
@@ -363,17 +414,70 @@ curl -X POST http://localhost:8080/api/upload \
 curl http://localhost:8080/api/logs
 ```
 
-### Docker
+### Docker Compose
 
-The Dockerfile currently builds the backend only. The frontend must be built separately (`cd frontend && npm run build`) and served via a reverse proxy or integrated into the container build.
+The multi-stage Docker image builds the existing Svelte frontend and serves it
+from the Rust API process. Compose starts that single application container and
+persists SQLite, ULogs, Parquet, metadata, and AI results in a named volume by
+default. Set the `STORAGE_URL` and `S3_*` variables from `.env.example` to keep
+SQLite on the volume while storing log artifacts in any S3-compatible service.
+Compose enables the idempotent five-log seed by default.
 
 ```bash
-# Build
-docker build -t flight-review .
-
-# Run with local storage
-docker run -p 8080:8080 -v /data:/data flight-review
+cp .env.example .env
+# Edit .env and set OPENROUTER_API_KEY
+docker compose up --build
 ```
+
+Open [http://localhost:3000](http://localhost:3000). The UI and API share the
+same origin. Stop the stack with `docker compose down`; add `--volumes` only
+when you intentionally want to delete all uploaded data.
+
+Temporal is not part of the default stack because conversion plus one model request is a bounded operation handled by the Rust upload service. If analysis later grows into a multi-step, long-running workflow, Temporal can be introduced without changing the saved `ai-analysis.json` contract.
+
+The same bundled image can be run without Compose:
+
+```bash
+docker build -t flight-review .
+docker run -p 8080:8080 -v flight-review-data:/data \
+  -e OPENROUTER_API_KEY=... flight-review
+```
+
+### Railway
+
+[`railway.json`](railway.json) configures Railway to build the root Dockerfile,
+probe `/health`, run one replica, and restart failed deployments. The server
+reads Railway's injected `PORT` automatically, and the image serves the Svelte
+SPA and Rust API together.
+
+1. Create a Railway project from this GitHub repository.
+2. Add a private Bucket named `FlightReviewData` in the same region as the app.
+3. Add the Bucket references to the app service:
+
+   ```dotenv
+   SERVER_FEATURES=s3
+   STORAGE_URL=s3://${{FlightReviewData.BUCKET}}/flight-review
+   S3_ACCESS_KEY_ID=${{FlightReviewData.ACCESS_KEY_ID}}
+   S3_SECRET_ACCESS_KEY=${{FlightReviewData.SECRET_ACCESS_KEY}}
+   S3_REGION=${{FlightReviewData.REGION}}
+   S3_ENDPOINT=${{FlightReviewData.ENDPOINT}}
+   S3_URL_STYLE=virtual
+   SEED_LOGS=true
+   ```
+
+4. Add `OPENROUTER_API_KEY` as a secret variable. Optional variables are listed
+   in [`.env.example`](.env.example).
+5. Attach a persistent volume at `/data` for SQLite and set
+   `RAILWAY_RUN_UID=0`; log artifacts live in the Bucket, not the volume.
+6. Generate a public domain and deploy. Railway uses `/health` to decide when
+   the deployment is ready; the five pinned examples populate in the
+   background and are skipped on subsequent starts.
+
+For a reusable one-click template, follow the exact app, Bucket, volume, and
+variable recipe in [`RAILWAY_TEMPLATE.md`](RAILWAY_TEMPLATE.md), then use
+**Project Settings → Generate Template from Project**. Railway templates are
+created in its Template Composer; there is currently no repository-owned
+template JSON import format.
 
 ### Production (AWS)
 
@@ -384,7 +488,8 @@ Postgres for the database, S3 for file storage, and optionally CloudFront for CD
 docker run -p 8080:8080 \
   flight-review serve \
   --db postgres://user:pass@host/flightreview \
-  --storage s3://my-bucket/logs
+  --storage s3://my-bucket/logs \
+  --frontend-dir /usr/share/flight-review/frontend
 
 # Full AWS example with credentials
 docker run -p 8080:8080 \
@@ -394,7 +499,8 @@ docker run -p 8080:8080 \
   flight-review serve \
   --db postgres://user:pass@rds-host.amazonaws.com/flightreview \
   --storage s3://px4-flight-review \
-  --v1-ulg-prefix flight_review/log_files
+  --v1-ulg-prefix flight_review/log_files \
+  --frontend-dir /usr/share/flight-review/frontend
 ```
 
 ## Migrate from v1
@@ -517,6 +623,7 @@ The upload endpoint accepts optional pilot-provided metadata as multipart form f
 | `feedback` | text | Pilot notes |
 | `video_url` | text | Link to flight video |
 | `location_name` | text | Human-readable location |
+| `ai_model` | text | OpenRouter model ID; falls back to `OPENROUTER_DEFAULT_MODEL` |
 
 ## Diagnostics
 
@@ -628,7 +735,6 @@ Shared DSP functions available in `dsp.rs`: `median_sample_rate`, `resample_unif
 - **User Accounts** -- optional authentication with email magic links, layered on top of the existing anonymous upload model
 - **PID Analysis API** -- server-side endpoint exposing the existing PID step response analysis for frontend consumption
 - **Dark Mode Polish** -- consistent dark mode across all pages (foundation exists but not fully polished)
-- **Frontend Production Build** -- integrate static frontend build into Docker image and server binary
 
 ## License
 

@@ -1,4 +1,4 @@
-import type { LogRecord, ListFilters, ListResponse, UploadOptions, UploadResponse, FlightMetadata, StatsResponse, VersionInfo } from './types';
+import type { AiAnalysis, AiBalanceResponse, AiModelsResponse, LogRecord, ListFilters, ListResponse, UploadOptions, UploadResponse, FlightMetadata, StatsResponse, VersionInfo } from './types';
 
 const BASE = '/api';
 
@@ -13,7 +13,14 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, init);
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new ApiError(res.status, body || res.statusText);
+    let message = body || res.statusText;
+    try {
+      const parsed = JSON.parse(body);
+      if (typeof parsed.error === 'string') message = parsed.error;
+    } catch {
+      // Preserve non-JSON provider/proxy errors as returned.
+    }
+    throw new ApiError(res.status, message);
   }
   return res.json();
 }
@@ -80,6 +87,7 @@ export function uploadLog(
     if (opts.tags) form.append('tags', opts.tags);
     if (opts.locationName) form.append('location_name', opts.locationName);
     if (opts.missionType) form.append('mission_type', opts.missionType);
+    if (opts.aiModel) form.append('ai_model', opts.aiModel);
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) onProgress((e.loaded / e.total) * 100);
@@ -100,6 +108,26 @@ export function uploadLog(
 
 export async function getMetadata(id: string): Promise<FlightMetadata> {
   return apiFetch(`/logs/${id}/data/metadata.json`);
+}
+
+export async function getAiModels(): Promise<AiModelsResponse> {
+  return apiFetch('/ai/models');
+}
+
+export async function getAiBalance(): Promise<AiBalanceResponse> {
+  return apiFetch('/ai/balance');
+}
+
+export async function getAiAnalysis(id: string): Promise<AiAnalysis> {
+  return apiFetch(`/logs/${id}/ai-analysis`);
+}
+
+export async function generateAiAnalysis(id: string, model: string): Promise<AiAnalysis> {
+  return apiFetch(`/logs/${id}/ai-analysis`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model }),
+  });
 }
 
 export interface TrackPointCompact {

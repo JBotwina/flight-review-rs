@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod api;
 pub mod db;
 pub mod extract;
@@ -23,6 +24,8 @@ pub struct AppState {
     pub mapbox_token: Option<String>,
     /// Shared HTTP client for outbound requests (geocoding, etc.).
     pub http_client: reqwest::Client,
+    /// OpenRouter client. None when OPENROUTER_API_KEY is not configured.
+    pub openrouter: Option<ai::OpenRouterClient>,
 }
 
 /// Build the application router. Shared by the binary (`main.rs`) and the
@@ -31,6 +34,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", get(api::health::health))
         .route("/api/version", get(api::version::version))
+        .route("/api/ai/models", get(api::ai::list_models))
+        .route("/api/ai/balance", get(api::ai::get_balance))
         .route(
             "/api/upload",
             post(api::upload::upload).layer(DefaultBodyLimit::max(512 * 1024 * 1024)), // 512 MB
@@ -41,6 +46,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route(
             "/api/logs/{id}",
             get(api::logs::get_log).delete(api::logs::delete_log),
+        )
+        .route(
+            "/api/logs/{id}/ai-analysis",
+            get(api::ai::get_analysis).post(api::ai::generate_analysis),
         )
         .route("/api/logs/{id}/track", get(api::logs::get_track))
         .route(

@@ -25,6 +25,7 @@ pub async fn upload(
     let mut tags: Option<String> = None;
     let mut location_name: Option<String> = None;
     let mut mission_type: Option<String> = None;
+    let mut ai_model: Option<String> = None;
     while let Some(field) = multipart
         .next_field()
         .await
@@ -66,6 +67,8 @@ pub async fn upload(
             location_name = Some(field.text().await.unwrap_or_default());
         } else if field.name() == Some("mission_type") {
             mission_type = Some(field.text().await.unwrap_or_default());
+        } else if field.name() == Some("ai_model") {
+            ai_model = Some(field.text().await.unwrap_or_default());
         }
     }
 
@@ -226,7 +229,40 @@ pub async fn upload(
         }
     }
 
-    // 7. Temp files cleaned up when tmp_dir is dropped
+    // 7. Generate AI analysis after the durable upload and DB insert. A model
+    // or provider failure must not roll back an otherwise valid flight log.
+    // When the caller does not choose a model, the server's configured default
+    // keeps API/CLI uploads consistent with the browser upload flow.
+    let mut ai_analysis = None;
+    let mut ai_analysis_error = None;
+    if let Some(client) = &state.openrouter {
+        let selected_model = ai_model
+            .as_deref()
+            .map(str::trim)
+            .filter(|model| !model.is_empty())
+            .unwrap_or_else(|| client.default_model());
+        match serde_json::to_value(&result.metadata) {
+            Ok(metadata) => match client.analyze(selected_model, &metadata).await {
+                Ok(analysis) => {
+                    if let Err(error) = super::ai::store_analysis(&state, log_id, &analysis).await {
+                        tracing::warn!(log_id = %log_id, ?error, "failed to save AI analysis");
+                        ai_analysis_error = Some(format!("failed to save AI analysis: {error:?}"));
+                    } else {
+                        ai_analysis = Some(analysis);
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!(log_id = %log_id, model = selected_model, %error, "AI analysis failed");
+                    ai_analysis_error = Some(error.to_string());
+                }
+            },
+            Err(error) => {
+                ai_analysis_error = Some(format!("failed to prepare AI analysis input: {error}"));
+            }
+        }
+    }
+
+    // 8. Temp files cleaned up when tmp_dir is dropped
 
     tracing::info!(
         log_id = %log_id,
@@ -236,7 +272,7 @@ pub async fn upload(
         "upload complete"
     );
 
-    // 8. Return JSON with log id and metadata summary
+    // 9. Return JSON with log id, metadata summary, and AI result.
     Ok(Json(serde_json::json!({
         "id": log_id,
         "filename": record.filename,
@@ -246,6 +282,8 @@ pub async fn upload(
         "topic_count": record.topic_count,
         "is_public": is_public,
         "delete_token": delete_token,
+        "ai_analysis": ai_analysis,
+        "ai_analysis_error": ai_analysis_error,
         "parquet_files": result.parquet_files.iter()
             .filter_map(|p| p.file_name().and_then(|n| n.to_str()).map(String::from))
             .collect::<Vec<_>>(),

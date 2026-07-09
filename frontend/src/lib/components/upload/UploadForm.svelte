@@ -1,6 +1,10 @@
 <script lang="ts">
-	import type { UploadOptions } from '$lib/types';
+	import { onMount } from 'svelte';
+	import { getAiBalance, getAiModels } from '$lib/api';
+	import type { AiBalanceResponse, AiModel, UploadOptions } from '$lib/types';
 	import { formatFileSize } from '$lib/utils/formatters';
+	import ModelPicker from '$lib/components/ai/ModelPicker.svelte';
+	import OpenRouterBalance from '$lib/components/ai/OpenRouterBalance.svelte';
 
 	let { file, onSubmit, disabled = false } = $props<{
 		file: File;
@@ -16,6 +20,28 @@
 	let locationName = $state('');
 	let tags = $state('');
 	let isPublic = $state(false);
+	let aiModels = $state<AiModel[]>([]);
+	let aiBalance = $state<AiBalanceResponse | null>(null);
+	let aiModel = $state('');
+	let aiModelsLoading = $state(true);
+	let aiEnabled = $state(false);
+	let aiModelsError = $state('');
+
+	onMount(async () => {
+		try {
+			const [response, balance] = await Promise.all([getAiModels(), getAiBalance()]);
+			aiEnabled = response.enabled;
+			aiModels = response.models;
+			aiBalance = balance;
+			if (response.enabled) {
+				aiModel = response.default_model ?? response.models[0]?.id ?? '';
+			}
+		} catch {
+			aiModelsError = 'Model list is temporarily unavailable. The server default will be used.';
+		} finally {
+			aiModelsLoading = false;
+		}
+	});
 
 	function handleSubmit(e: Event) {
 		e.preventDefault();
@@ -28,6 +54,7 @@
 		if (locationName) opts.locationName = locationName;
 		if (tags) opts.tags = tags;
 		opts.isPublic = isPublic;
+		if (aiModel) opts.aiModel = aiModel;
 		onSubmit(opts);
 	}
 </script>
@@ -140,6 +167,35 @@
 			</div>
 		</div>
 
+		<!-- AI analysis configuration -->
+		<div class="relative overflow-visible rounded-lg border border-sky-200 bg-sky-50/70 p-4">
+			<div class="mb-3 flex items-start gap-3">
+				<div class="flex size-9 shrink-0 items-center justify-center rounded-md bg-slate-900 text-sky-300 shadow-sm">
+					<svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 2v3m0 14v3M4.93 4.93l2.12 2.12m9.9 9.9 2.12 2.12M2 12h3m14 0h3M4.93 19.07l2.12-2.12m9.9-9.9 2.12-2.12" />
+						<circle cx="12" cy="12" r="4" />
+					</svg>
+				</div>
+				<div>
+					<div class="flex flex-wrap items-center gap-2">
+						<p class="text-sm font-semibold text-slate-900">AI flight brief</p>
+						{#if aiBalance}<OpenRouterBalance balance={aiBalance} compact />{/if}
+					</div>
+					<p class="mt-0.5 text-xs leading-5 text-slate-600">After Rust diagnostics finish, the selected model will summarize the flight and look for evidence-backed anomalies.</p>
+				</div>
+			</div>
+
+			{#if aiModelsLoading}
+				<div class="h-14 animate-pulse rounded-md bg-sky-100"></div>
+			{:else if aiEnabled && aiModels.length > 0}
+				<ModelPicker models={aiModels} selected={aiModel} onSelect={(model) => (aiModel = model)} disabled={disabled} />
+			{:else if aiModelsError}
+				<p class="rounded-md bg-white px-3 py-2 text-xs text-amber-700 ring-1 ring-amber-200">{aiModelsError}</p>
+			{:else}
+				<p class="rounded-md bg-white px-3 py-2 text-xs text-slate-500 ring-1 ring-slate-200">AI analysis is disabled. Set <code class="font-mono text-slate-700">OPENROUTER_API_KEY</code> on the Rust service to enable it.</p>
+			{/if}
+		</div>
+
 		<div class="flex items-center justify-between pt-2">
 			<label class="flex items-center gap-2 cursor-pointer">
 				<input
@@ -155,7 +211,7 @@
 				disabled={disabled}
 				class="rounded-md bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 focus:outline-2 focus:outline-offset-2 focus:outline-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
 			>
-				Upload
+				Upload &amp; analyze
 			</button>
 		</div>
 	</form>

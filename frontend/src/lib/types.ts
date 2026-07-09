@@ -64,6 +64,7 @@ export interface UploadOptions {
   tags?: string;
   locationName?: string;
   missionType?: string;
+  aiModel?: string;
 }
 
 export interface UploadResponse {
@@ -75,7 +76,81 @@ export interface UploadResponse {
   topic_count: number;
   is_public: boolean;
   delete_token: string;
+  ai_analysis: AiAnalysis | null;
+  ai_analysis_error: string | null;
   parquet_files: string[];
+}
+
+// --- OpenRouter AI analysis types ---
+
+export interface AiModel {
+  id: string;
+  name: string;
+  description: string | null;
+  context_length: number | null;
+  pricing: {
+    prompt: string | null;
+    completion: string | null;
+  } | null;
+}
+
+export interface AiModelsResponse {
+  enabled: boolean;
+  default_model: string | null;
+  models: AiModel[];
+}
+
+export interface AiBalanceResponse {
+  enabled: boolean;
+  limit: number | null;
+  limit_remaining: number | null;
+  limit_reset: string | null;
+  usage: number;
+  usage_daily: number;
+  usage_weekly: number;
+  usage_monthly: number;
+  is_free_tier: boolean;
+}
+
+export type AiRiskLevel = 'low' | 'moderate' | 'high' | 'critical' | 'unknown';
+export type AiFindingSeverity = 'info' | 'warning' | 'critical' | 'unknown';
+export type AiRecommendationPriority = 'high' | 'medium' | 'low' | 'unknown';
+
+export interface AiAnalysis {
+  schema_version: number;
+  generated_at: string;
+  requested_model: string;
+  model: string;
+  summary: string;
+  risk_level: AiRiskLevel;
+  confidence: number | null;
+  findings: AiFinding[];
+  positive_observations: string[];
+  recommendations: AiRecommendation[];
+  limitations: string[];
+  usage: AiUsage | null;
+}
+
+export interface AiFinding {
+  category: string;
+  severity: AiFindingSeverity;
+  title: string;
+  explanation: string;
+  evidence: string[];
+  time_range_s: { start: number; end: number | null } | null;
+}
+
+export interface AiRecommendation {
+  priority: AiRecommendationPriority;
+  action: string;
+  rationale: string;
+}
+
+export interface AiUsage {
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+  cost: number | null;
 }
 
 /// Backend version info from GET /api/version. The frontend reports its own

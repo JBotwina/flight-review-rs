@@ -1,9 +1,12 @@
+use axum::{http::StatusCode, routing::any};
 use clap::{Args, Parser, Subcommand};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tower_http::services::{ServeDir, ServeFile};
 use tracing_subscriber::EnvFilter;
 
-use flight_review_server::{db, storage::FileStorage, AppState};
+use flight_review_server::{ai::OpenRouterClient, db, storage::FileStorage, AppState};
 
 #[derive(Parser)]
 #[command(version, about = "Flight Review v2 server")]
@@ -23,15 +26,19 @@ enum Command {
 #[derive(Args)]
 struct ServeConfig {
     /// Database connection URL
-    #[arg(long, default_value = "sqlite:///data/flight-review.db")]
+    #[arg(
+        long,
+        env = "DATABASE_URL",
+        default_value = "sqlite:///data/flight-review.db"
+    )]
     db: String,
 
     /// Object-storage URL (file:// or s3://)
-    #[arg(long, default_value = "file:///data/files")]
+    #[arg(long, env = "STORAGE_URL", default_value_t = default_storage_url())]
     storage: String,
 
     /// Port to listen on
-    #[arg(long, default_value_t = 8080)]
+    #[arg(long, env = "PORT", default_value_t = 8080)]
     port: u16,
 
     /// Host / bind address
@@ -47,6 +54,20 @@ struct ServeConfig {
     /// Can also be set via the MAPBOX_ACCESS_TOKEN environment variable.
     #[arg(long, env = "MAPBOX_ACCESS_TOKEN")]
     mapbox_token: Option<String>,
+
+    /// Directory containing built frontend assets to serve.
+    /// When omitted, the server exposes API routes only.
+    #[arg(long)]
+    frontend_dir: Option<PathBuf>,
+}
+
+fn default_storage_url() -> String {
+    std::env::var("BUCKET")
+        .ok()
+        .map(|bucket| bucket.trim().to_string())
+        .filter(|bucket| !bucket.is_empty())
+        .map(|bucket| format!("s3://{bucket}/flight-review"))
+        .unwrap_or_else(|| "file:///data/files".to_string())
 }
 
 #[derive(Args)]
@@ -100,6 +121,9 @@ async fn run_server(config: ServeConfig) {
     if config.mapbox_token.is_some() {
         tracing::info!("mapbox geocoding: enabled");
     }
+    if let Some(ref frontend_dir) = config.frontend_dir {
+        tracing::info!("frontend: {}", frontend_dir.display());
+    }
 
     let db = db::create_db(&config.db)
         .await
@@ -108,15 +132,36 @@ async fn run_server(config: ServeConfig) {
         FileStorage::from_url(&config.storage).expect("failed to init storage"),
     );
 
+    let http_client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(120))
+        .user_agent("px4-flight-review-rs")
+        .build()
+        .expect("failed to build HTTP client");
+    let openrouter = OpenRouterClient::from_env(http_client.clone());
+    if let Some(client) = &openrouter {
+        tracing::info!(default_model = client.default_model(), "OpenRouter AI analysis: enabled");
+    } else {
+        tracing::info!("OpenRouter AI analysis: disabled (OPENROUTER_API_KEY is not set)");
+    }
+
     let state = Arc::new(AppState {
         db,
         storage,
         v1_ulg_prefix: config.v1_ulg_prefix,
         mapbox_token: config.mapbox_token,
-        http_client: reqwest::Client::new(),
+        http_client,
+        openrouter,
     });
 
-    let app = flight_review_server::build_router(state);
+    let mut app = flight_review_server::build_router(state);
+    if let Some(frontend_dir) = config.frontend_dir {
+        let index = frontend_dir.join("index.html");
+        app = app
+            .route("/api", any(api_not_found))
+            .route("/api/{*path}", any(api_not_found))
+            .fallback_service(ServeDir::new(frontend_dir).fallback(ServeFile::new(index)));
+    }
 
     let addr = format!("{}:{}", config.host, config.port);
     let listener = TcpListener::bind(&addr)
@@ -127,6 +172,10 @@ async fn run_server(config: ServeConfig) {
     axum::serve(listener, app)
         .await
         .expect("server error");
+}
+
+async fn api_not_found() -> StatusCode {
+    StatusCode::NOT_FOUND
 }
 
 /// Map v1 MavType string to a normalized vehicle type category.

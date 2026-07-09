@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { UploadResponse } from '$lib/types';
 	import { formatDuration } from '$lib/utils/formatters';
+	import AiAnalysisCard from '$lib/components/ai/AiAnalysisCard.svelte';
 
 	let { result, onUploadAnother } = $props<{
 		result: UploadResponse;
@@ -123,3 +124,19 @@
 		</button>
 	</div>
 </div>
+
+{#if result.ai_analysis}
+	<div class="mb-8">
+		<AiAnalysisCard analysis={result.ai_analysis} compact />
+		<a href="/log/{result.id}/ai" class="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-sky-700 hover:text-sky-600">
+			Open the complete AI debrief
+			<svg class="size-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.69L10.22 5.03a.75.75 0 011.06-1.06l5.5 5.5a.75.75 0 010 1.06l-5.5 5.5a.75.75 0 11-1.06-1.06l4.22-4.22H3.75A.75.75 0 013 10z" clip-rule="evenodd" /></svg>
+		</a>
+	</div>
+{:else if result.ai_analysis_error}
+	<div class="mb-8 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+		<p class="text-sm font-semibold text-amber-800">The log is safe, but AI analysis could not finish.</p>
+		<p class="mt-1 text-xs leading-5 text-amber-700">{result.ai_analysis_error} You can retry with a different model from the log’s AI tab.</p>
+		<a href="/log/{result.id}/ai" class="mt-2 inline-flex text-xs font-bold text-amber-800 underline">Open AI analysis</a>
+	</div>
+{/if}

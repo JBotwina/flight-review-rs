@@ -28,8 +28,8 @@
 					/>
 				</svg>
 			</div>
-			<p class="text-sm font-medium text-gray-700">Converting...</p>
-			<p class="text-xs text-gray-500 mt-1">Parsing ULog and generating Parquet files</p>
+			<p class="text-sm font-medium text-gray-700">Processing flight evidence...</p>
+			<p class="text-xs text-gray-500 mt-1">Running Rust diagnostics and preparing the AI flight brief</p>
 		{:else}
 			<!-- Determinate progress bar for upload phase -->
 			<p class="text-sm font-medium text-gray-700 mb-3">Uploading... {Math.round(progress)}%</p>

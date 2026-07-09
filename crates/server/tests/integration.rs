@@ -63,6 +63,7 @@ async fn start_server() -> (String, tokio::task::JoinHandle<()>) {
         v1_ulg_prefix: None,
         mapbox_token: None,
         http_client: reqwest::Client::new(),
+        openrouter: None,
     });
 
     // Use the same router the binary serves, so the test never drifts from
@@ -123,6 +124,28 @@ async fn test_full_lifecycle() {
     }
     assert_eq!(body["px4_ulog"], "0.6.1", "px4-ulog version should match Cargo.lock");
 
+    // 1c. AI configuration is discoverable without exposing a key.
+    let resp = client
+        .get(format!("{}/api/ai/models", base_url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: Value = resp.json().await.unwrap();
+    assert_eq!(body["enabled"], false);
+    assert_eq!(body["models"].as_array().unwrap().len(), 0);
+
+    let resp = client
+        .get(format!("{}/api/ai/balance", base_url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: Value = resp.json().await.unwrap();
+    assert_eq!(body["enabled"], false);
+    assert_eq!(body["limit_remaining"], Value::Null);
+    assert!(body.get("label").is_none());
+
     // 2. Upload a log
     let fixture = fixture_path("sample.ulg");
     assert!(fixture.exists(), "Fixture not found: {:?}", fixture);
@@ -158,6 +181,8 @@ async fn test_full_lifecycle() {
     assert_eq!(upload["topic_count"], 15);
     assert!(upload["is_public"].as_bool().unwrap());
     assert!(upload["flight_duration_s"].as_f64().unwrap() > 0.0);
+    assert!(upload["ai_analysis"].is_null());
+    assert!(upload["ai_analysis_error"].is_null());
 
     // 3. List logs — should appear
     let resp = client
@@ -203,6 +228,14 @@ async fn test_full_lifecycle() {
         analysis["flight_modes"].as_array().unwrap().len() > 0,
         "should have flight modes"
     );
+
+    // No analysis artifact exists when OpenRouter is disabled.
+    let resp = client
+        .get(format!("{}/api/logs/{}/ai-analysis", base_url, log_id))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 404);
 
     // 6. Get Parquet file with Range request
     let resp = client

@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "description": "Public PX4 Flight Review logs used to seed new Flight Review deployments.",
+  "logs": [
+    {
+      "id": "0109b524-ae37-43db-ac9d-2f3344ce8513",
+      "url": "https://cdn.logs.px4.io/0109b524-ae37-43db-ac9d-2f3344ce8513.ulg",
+      "sha256": "08144ca320edb8feecc69315cbc9edbcd39abd758ef374d64405cc7025f89f76",
+      "vehicle": "Fixed Wing",
+      "rating": 4,
+      "description": "Seed example: PX4 v1.14 fixed-wing flight"
+    },
+    {
+      "id": "01349a1e-3778-4368-a7f6-9df380ec5997",
+      "url": "https://cdn.logs.px4.io/01349a1e-3778-4368-a7f6-9df380ec5997.ulg",
+      "sha256": "ba38fbfa8c658e4a99b1b0e75e694c1019ffa57285f2b0b2e8ac099b6727de0c",
+      "vehicle": "Fixed Wing",
+      "rating": 5,
+      "description": "Seed example: highly rated PX4 v1.14 fixed-wing flight"
+    },
+    {
+      "id": "05331af8-4ebb-4f11-8f00-2ab84fa4891a",
+      "url": "https://cdn.logs.px4.io/05331af8-4ebb-4f11-8f00-2ab84fa4891a.ulg",
+      "sha256": "5a321b04c4575b960009e6c987e6b30716c0c5be1163bd2e46a4a9e9c9e16060",
+      "vehicle": "Quadrotor",
+      "rating": 5,
+      "description": "Seed example: highly rated PX4 v1.16 quadrotor flight"
+    },
+    {
+      "id": "05873753-2643-41c3-90da-4d8a5c4ec471",
+      "url": "https://cdn.logs.px4.io/05873753-2643-41c3-90da-4d8a5c4ec471.ulg",
+      "sha256": "228f70ae987e9a34d02c2beaade91ba439c846db9daa00e87ca88f661ae30bab",
+      "vehicle": "Quadrotor",
+      "rating": 4,
+      "description": "Seed example: PX4 v1.16 quadrotor flight"
+    },
+    {
+      "id": "087d9058-599a-435c-a63b-8c745ff0e71b",
+      "url": "https://cdn.logs.px4.io/087d9058-599a-435c-a63b-8c745ff0e71b.ulg",
+      "sha256": "79e8cef5956ef7c975381d745ee76f275595cb1bb82e1da512d8afbc6263eac6",
+      "vehicle": "VTOL Standard",
+      "rating": 4,
+      "description": "Seed example: PX4 v1.14 standard VTOL flight"
+    }
+  ]
+}
