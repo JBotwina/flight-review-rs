@@ -2,14 +2,14 @@ name: Diagnostics
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
     paths:
       - 'crates/converter/src/diagnostics/**'
       - 'crates/converter/tests/fixtures/**'
       - 'crates/converter/benches/**'
       - 'scripts/ci/check-analyzer.sh'
   pull_request:
-    branches: [main]
+    branches: [main, staging]
     paths:
       - 'crates/converter/src/diagnostics/**'
       - 'crates/converter/tests/fixtures/**'

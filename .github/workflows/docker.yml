@@ -6,12 +6,18 @@ on:
   # is built-and-discarded on PRs (push: false), so running it on every change
   # was wasted time. release.yml still builds and publishes on version tags.
   pull_request:
-    branches: [main]
+    branches: [main, staging]
     paths:
+      - '.dockerignore'
       - 'Dockerfile'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'crates/**'
+      - 'frontend/**'
+      - 'scripts/docker-entrypoint.sh'
+      - 'scripts/seed-logs.sh'
+      - 'seed/**'
+      - 'railway.json'
       - '.github/workflows/docker.yml'
   workflow_dispatch:
 
