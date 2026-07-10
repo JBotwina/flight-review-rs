@@ -10,8 +10,8 @@ COPY crates/ crates/
 # additional features make the same image work with Postgres and S3-compatible
 # providers such as Railway Buckets.
 ARG SERVER_FEATURES=postgres,s3
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/build/target \
+RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=cargo-target,target=/build/target \
     cargo build --release \
       -p flight-review-server --features "$SERVER_FEATURES" \
       -p flight-review --bins \
@@ -24,7 +24,7 @@ FROM node:22-bookworm-slim AS frontend
 WORKDIR /build/frontend
 
 COPY frontend/package.json frontend/package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm \
+RUN --mount=type=cache,id=npm-cache,target=/root/.npm \
     npm ci --include=optional --no-audit --no-fund
 
 COPY frontend/ ./
