@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { getAiBalance, getAiModels } from '$lib/api';
 	import type { AiBalanceResponse, AiModel, UploadOptions } from '$lib/types';
 	import { formatFileSize } from '$lib/utils/formatters';
@@ -23,25 +22,35 @@
 	let aiModels = $state<AiModel[]>([]);
 	let aiBalance = $state<AiBalanceResponse | null>(null);
 	let aiModel = $state('');
-	let aiModelsLoading = $state(true);
+	let runAiAnalysis = $state(false);
+	let aiModelsLoading = $state(false);
+	let aiOptionsLoaded = $state(false);
 	let aiEnabled = $state(false);
 	let aiModelsError = $state('');
 
-	onMount(async () => {
+	async function handleAiToggle(event: Event) {
+		runAiAnalysis = (event.currentTarget as HTMLInputElement).checked;
+		if (!runAiAnalysis || aiOptionsLoaded) return;
+
+		aiModelsLoading = true;
+		aiModelsError = '';
 		try {
 			const [response, balance] = await Promise.all([getAiModels(), getAiBalance()]);
-			aiEnabled = response.enabled;
+			aiEnabled = response.enabled && response.models.length > 0;
 			aiModels = response.models;
 			aiBalance = balance;
-			if (response.enabled) {
+			aiOptionsLoaded = true;
+			if (aiEnabled) {
 				aiModel = response.default_model ?? response.models[0]?.id ?? '';
 			}
+			if (!aiModel) runAiAnalysis = false;
 		} catch {
-			aiModelsError = 'Model list is temporarily unavailable. The server default will be used.';
+			aiModelsError = 'Model list is temporarily unavailable. Upload will continue without AI.';
+			runAiAnalysis = false;
 		} finally {
 			aiModelsLoading = false;
 		}
-	});
+	}
 
 	function handleSubmit(e: Event) {
 		e.preventDefault();
@@ -54,7 +63,7 @@
 		if (locationName) opts.locationName = locationName;
 		if (tags) opts.tags = tags;
 		opts.isPublic = isPublic;
-		if (aiModel) opts.aiModel = aiModel;
+		if (runAiAnalysis && aiModel) opts.aiModel = aiModel;
 		onSubmit(opts);
 	}
 </script>
@@ -181,18 +190,34 @@
 						<p class="text-sm font-semibold text-slate-900">AI flight brief</p>
 						{#if aiBalance}<OpenRouterBalance balance={aiBalance} compact />{/if}
 					</div>
-					<p class="mt-0.5 text-xs leading-5 text-slate-600">After Rust diagnostics finish, the selected model will summarize the flight and look for evidence-backed anomalies.</p>
+					<p class="mt-0.5 text-xs leading-5 text-slate-600">Off by default. Enable this only when you want to spend OpenRouter credits for this upload.</p>
 				</div>
 			</div>
 
-			{#if aiModelsLoading}
-				<div class="h-14 animate-pulse rounded-md bg-sky-100"></div>
-			{:else if aiEnabled && aiModels.length > 0}
-				<ModelPicker models={aiModels} selected={aiModel} onSelect={(model) => (aiModel = model)} disabled={disabled} />
+			<label class="flex items-start gap-3 rounded-md bg-white px-3 py-2.5 ring-1 ring-sky-200">
+				<input
+					type="checkbox"
+					checked={runAiAnalysis}
+					onchange={handleAiToggle}
+					disabled={disabled || aiModelsLoading || (aiOptionsLoaded && !aiEnabled)}
+					class="mt-0.5 size-4 rounded border-gray-300 bg-white text-sky-600 focus:ring-sky-500 disabled:opacity-50"
+				/>
+				<span>
+					<span class="block text-sm font-semibold text-slate-800">Generate an AI flight brief after upload</span>
+					<span class="block text-xs leading-5 text-slate-500">This makes one paid model request. You can also generate a brief later from the log’s AI Analysis tab.</span>
+				</span>
+			</label>
+
+			{#if runAiAnalysis && aiModel}
+				<div class="mt-3">
+					<ModelPicker models={aiModels} selected={aiModel} onSelect={(model) => (aiModel = model)} disabled={disabled} />
+				</div>
+			{:else if aiModelsLoading}
+				<p class="mt-3 text-xs text-slate-500">Checking available AI models…</p>
 			{:else if aiModelsError}
-				<p class="rounded-md bg-white px-3 py-2 text-xs text-amber-700 ring-1 ring-amber-200">{aiModelsError}</p>
-			{:else}
-				<p class="rounded-md bg-white px-3 py-2 text-xs text-slate-500 ring-1 ring-slate-200">AI analysis is disabled. Set <code class="font-mono text-slate-700">OPENROUTER_API_KEY</code> on the Rust service to enable it.</p>
+				<p class="mt-3 rounded-md bg-white px-3 py-2 text-xs text-amber-700 ring-1 ring-amber-200">{aiModelsError}</p>
+			{:else if aiOptionsLoaded && !aiEnabled}
+				<p class="mt-3 rounded-md bg-white px-3 py-2 text-xs text-slate-500 ring-1 ring-slate-200">AI analysis is disabled. Set <code class="font-mono text-slate-700">OPENROUTER_API_KEY</code> on the Rust service to enable it.</p>
 			{/if}
 		</div>
 
@@ -211,7 +236,7 @@
 				disabled={disabled}
 				class="rounded-md bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 focus:outline-2 focus:outline-offset-2 focus:outline-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
 			>
-				Upload &amp; analyze
+				{runAiAnalysis ? 'Upload & analyze' : 'Upload log'}
 			</button>
 		</div>
 	</form>

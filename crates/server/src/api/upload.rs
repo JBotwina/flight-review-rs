@@ -32,10 +32,7 @@ pub async fn upload(
         .map_err(|e| ApiError::BadRequest(format!("multipart error: {e}")))?
     {
         if field.name() == Some("file") {
-            let filename = field
-                .file_name()
-                .unwrap_or("upload.ulg")
-                .to_string();
+            let filename = field.file_name().unwrap_or("upload.ulg").to_string();
             let data = field
                 .bytes()
                 .await
@@ -128,11 +125,10 @@ pub async fn upload(
     // 5b. Reverse-geocode if location_name was not provided by the user
     let lat = result.metadata.gps_first_fix.as_ref().map(|g| g.lat_deg);
     let lon = result.metadata.gps_first_fix.as_ref().map(|g| g.lon_deg);
-    let user_gave_location = location_name
-        .as_ref()
-        .is_some_and(|s| !s.trim().is_empty());
+    let user_gave_location = location_name.as_ref().is_some_and(|s| !s.trim().is_empty());
     if !user_gave_location {
-        if let (Some(lat_val), Some(lon_val), Some(token)) = (lat, lon, state.mapbox_token.as_deref())
+        if let (Some(lat_val), Some(lon_val), Some(token)) =
+            (lat, lon, state.mapbox_token.as_deref())
         {
             match crate::geocode::reverse_geocode(&state.http_client, token, lat_val, lon_val).await
             {
@@ -219,7 +215,9 @@ pub async fn upload(
                     summary: d.summary.clone(),
                     timestamp_us: Some(d.timestamp_us as i64),
                     end_timestamp_us: match &d.kind {
-                        flight_review::diagnostics::AnomalyKind::Region { end_timestamp_us } => Some(*end_timestamp_us as i64),
+                        flight_review::diagnostics::AnomalyKind::Region { end_timestamp_us } => {
+                            Some(*end_timestamp_us as i64)
+                        }
                         flight_review::diagnostics::AnomalyKind::Point => None,
                     },
                     evidence: serde_json::to_string(&d.evidence).ok(),
@@ -229,18 +227,14 @@ pub async fn upload(
         }
     }
 
-    // 7. Generate AI analysis after the durable upload and DB insert. A model
-    // or provider failure must not roll back an otherwise valid flight log.
-    // When the caller does not choose a model, the server's configured default
-    // keeps API/CLI uploads consistent with the browser upload flow.
+    // 7. Generate AI analysis only when the caller explicitly requests a
+    // non-empty model. OpenRouter calls cost money, so merely configuring a key
+    // must never make uploads (including seed imports) invoke a model.
     let mut ai_analysis = None;
     let mut ai_analysis_error = None;
-    if let Some(client) = &state.openrouter {
-        let selected_model = ai_model
-            .as_deref()
-            .map(str::trim)
-            .filter(|model| !model.is_empty())
-            .unwrap_or_else(|| client.default_model());
+    if let (Some(client), Some(selected_model)) =
+        (&state.openrouter, explicit_ai_model(ai_model.as_deref()))
+    {
         match serde_json::to_value(&result.metadata) {
             Ok(metadata) => match client.analyze(selected_model, &metadata).await {
                 Ok(analysis) => {
@@ -288,4 +282,24 @@ pub async fn upload(
             .filter_map(|p| p.file_name().and_then(|n| n.to_str()).map(String::from))
             .collect::<Vec<_>>(),
     })))
+}
+
+fn explicit_ai_model(model: Option<&str>) -> Option<&str> {
+    model.map(str::trim).filter(|model| !model.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::explicit_ai_model;
+
+    #[test]
+    fn ai_analysis_requires_an_explicit_non_empty_model() {
+        assert_eq!(explicit_ai_model(None), None);
+        assert_eq!(explicit_ai_model(Some("")), None);
+        assert_eq!(explicit_ai_model(Some("   ")), None);
+        assert_eq!(
+            explicit_ai_model(Some("  anthropic/claude-sonnet-4  ")),
+            Some("anthropic/claude-sonnet-4")
+        );
+    }
 }

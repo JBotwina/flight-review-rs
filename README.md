@@ -45,7 +45,8 @@ Flight Review v2 is a complete rewrite of [PX4 Flight Review](https://github.com
 ### Upload Workflow
 
 ```
-Upload .ulg --> Rust converter --> Parquet + metadata.json --> OpenRouter debrief --> Storage
+Upload .ulg --> Rust converter --> Parquet + metadata.json --> Storage
+                                      +--> OpenRouter debrief (explicit opt-in)
 ```
 
 At upload time the server parses the ULog file once, writes compressed Parquet files (one per topic) and a `metadata.json` containing all extracted metadata and flight analysis results. From that point on the browser queries Parquet directly via DuckDB-WASM and HTTP Range requests -- the server never re-parses the log.
@@ -212,7 +213,7 @@ The `metadata.json` includes flight modes, stats, battery summary, GPS quality, 
 
 ### AI analysis
 
-AI analysis is owned by the Rust API; the OpenRouter key is never sent to the browser. During upload, the deterministic converter runs first and the log is durably stored. The server then sends OpenRouter a bounded evidence packet containing flight modes, statistics, diagnostics, field summaries, parameter changes, and logged messages. Raw ULog samples, the GPS track, exact coordinates, raw parameters, and the vehicle UUID are excluded.
+AI analysis is owned by the Rust API; the OpenRouter key is never sent to the browser. It is strictly opt-in: uploads and seed imports never call OpenRouter unless the caller explicitly selects a non-empty model, and the upload form leaves that choice unchecked by default. After the deterministic converter durably stores the log, an explicitly requested analysis sends OpenRouter a bounded evidence packet containing flight modes, statistics, diagnostics, field summaries, parameter changes, and logged messages. Raw ULog samples, the GPS track, exact coordinates, raw parameters, and the vehicle UUID are excluded.
 
 If OpenRouter fails, the upload still succeeds and the UI offers a retry from the **AI Analysis** tab. Choosing another model regenerates `ai-analysis.json` without changing the deterministic analysis. The UI also shows the configured key's remaining spending limit and usage; OpenRouter keys without a limit are shown as unlimited. The response is an engineering aid and is not an airworthiness determination.
 
@@ -624,7 +625,7 @@ The upload endpoint accepts optional pilot-provided metadata as multipart form f
 | `feedback` | text | Pilot notes |
 | `video_url` | text | Link to flight video |
 | `location_name` | text | Human-readable location |
-| `ai_model` | text | OpenRouter model ID; falls back to `OPENROUTER_DEFAULT_MODEL` |
+| `ai_model` | text | Optional OpenRouter model ID; analysis runs only when this is explicitly non-empty |
 
 ## Diagnostics
 
