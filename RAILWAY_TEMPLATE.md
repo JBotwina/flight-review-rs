@@ -57,8 +57,9 @@ The volume contains only the SQLite database. Durable log artifacts live in the
 
 | Variable | Required | Default | Notes |
 |----------|----------|---------|-------|
+| `ACCESS_PASSWORD` | Yes | — | Shared pilot password. Store as a sealed secret; PR environments inherit it from staging. |
 | `OPENROUTER_API_KEY` | Yes | — | Mark as a secret. Never bake it into the image. |
-| `OPENROUTER_DEFAULT_MODEL` | No | `openrouter/auto` | Used for API uploads that do not select a model. |
+| `OPENROUTER_DEFAULT_MODEL` | No | `openrouter/auto` | Preselected only after a user opts in to AI analysis; it never triggers analysis by itself. |
 | `OPENROUTER_APP_NAME` | No | `PX4 Flight Review` | OpenRouter attribution title. |
 | `OPENROUTER_BASE_URL` | No | `https://openrouter.ai/api/v1` | Override only for a compatible gateway. |
 | `RUST_LOG` | No | `info` | Rust tracing filter. |
@@ -73,7 +74,6 @@ The volume contains only the SQLite database. Durable log artifacts live in the
 | `S3_URL_STYLE` | Yes | `virtual` | Railway Buckets use virtual-hosted-style URLs. |
 | `SEED_LOGS` | Yes | `true` | On every start, idempotently checks and imports the five pinned public examples that are missing. |
 | `SEED_LOGS_PUBLIC` | No | `true` | Makes seed examples visible in the default Browse view. |
-| `SEED_AI_MODEL` | No | — | Optional model override; empty uses `OPENROUTER_DEFAULT_MODEL`. |
 
 `PORT`, `RAILWAY_PUBLIC_DOMAIN`, and the volume variables are provided by
 Railway. The server reads `PORT` automatically, derives OpenRouter's site URL
@@ -84,7 +84,8 @@ The image contains only `seed/logs.json`, not the 268 MB of ULogs. Its startup
 seed pass downloads exact pinned CDN objects, verifies their SHA-256 hashes,
 and sends missing logs through the normal upload API. Existing filenames are
 skipped, so restarts and redeployments do not create duplicates. A failed seed
-pass does not take down the app and is retried on the next start. The
+pass does not take down the app and is retried on the next start. Seed imports
+never request paid AI analysis, even when OpenRouter is configured. The
 entrypoint initializes ownership on Railway's root-mounted volume and
 immediately drops to the unprivileged `flightreview` user before starting the
 server or seed process.

@@ -1,24 +1,9 @@
 name: Docker
 
 on:
-  # Only run when something that actually affects the image changes. The build
-  # is the slowest job in CI (~8 min, full workspace recompile) and the image
-  # is built-and-discarded on PRs (push: false), so running it on every change
-  # was wasted time. release.yml still builds and publishes on version tags.
-  pull_request:
-    branches: [main, staging]
-    paths:
-      - '.dockerignore'
-      - 'Dockerfile'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'crates/**'
-      - 'frontend/**'
-      - 'scripts/docker-entrypoint.sh'
-      - 'scripts/seed-logs.sh'
-      - 'seed/**'
-      - 'railway.json'
-      - '.github/workflows/docker.yml'
+  # Railway preview environments build this Dockerfile and verify /health for
+  # every PR. Keep this workflow for explicit local/release validation without
+  # making previews wait for a duplicate build-and-discard job.
   workflow_dispatch:
 
 jobs:

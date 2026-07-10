@@ -1,16 +1,40 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
+	import { onMount, type Snippet } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { darkMode } from '$lib/stores/theme';
+	import { getAuthSession } from '$lib/api';
 	import NavBar from '$lib/components/shared/NavBar.svelte';
 	import '../app.css';
 
 	let { children } = $props<{ children: Snippet }>();
+	let authReady = $state(false);
+	let authenticated = $state(false);
+	let isPublicAccessRoute = $derived(page.url.pathname === '/login' || page.url.pathname === '/404');
 
 	// Hide the main nav sidebar on log viewer pages — it has its own topic tree sidebar
 	let isLogViewer = $derived(page.url.pathname.startsWith('/log/'));
+	let showApp = $derived(authReady && authenticated && !isPublicAccessRoute);
+
+	onMount(async () => {
+		try {
+			authenticated = (await getAuthSession()).authenticated;
+		} catch {
+			authenticated = false;
+		} finally {
+			authReady = true;
+		}
+	});
+
+	$effect(() => {
+		if (!browser || !authReady) return;
+		if (!authenticated && !isPublicAccessRoute) {
+			goto('/404', { replaceState: true });
+		} else if (authenticated && page.url.pathname === '/login') {
+			goto('/', { replaceState: true });
+		}
+	});
 
 	// Initialize dark mode class on mount
 	$effect(() => {
@@ -74,16 +98,20 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-{#if !isLogViewer}
+{#if showApp && !isLogViewer}
 	<NavBar currentPath={page.url.pathname} />
 {/if}
 
-<main class="{isLogViewer ? '' : 'lg:pl-72 overflow-x-hidden'}">
-	{@render children()}
-</main>
+{#if isPublicAccessRoute || showApp}
+	<main class="{showApp && !isLogViewer ? 'lg:pl-72 overflow-x-hidden' : ''}">
+		{@render children()}
+	</main>
+{:else}
+	<div class="min-h-screen bg-[#07131d]" aria-hidden="true"></div>
+{/if}
 
 <!-- Keyboard shortcut help dialog -->
-{#if shortcutHelpOpen}
+{#if showApp && shortcutHelpOpen}
 	<div class="fixed inset-0 z-[100] flex items-center justify-center">
 		<!-- Backdrop -->
 		<!-- biome-ignore lint: backdrop click to close -->

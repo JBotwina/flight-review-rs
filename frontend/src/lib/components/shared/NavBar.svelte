@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { darkMode } from '$lib/stores/theme';
+	import { logout } from '$lib/api';
 	import VersionBadge from './VersionBadge.svelte';
 
 	let { currentPath } = $props<{ currentPath: string }>();
@@ -19,6 +20,14 @@
 
 	function closeMobileMenu() {
 		mobileMenuOpen = false;
+	}
+
+	async function signOut() {
+		try {
+			await logout();
+		} finally {
+			window.location.assign('/404');
+		}
 	}
 </script>
 
@@ -94,6 +103,15 @@
 					</ul>
 				</li>
 				<li class="mt-auto space-y-3">
+					<button
+						onclick={signOut}
+						class="flex w-full items-center gap-x-3 rounded-md p-2 text-sm font-semibold leading-6 text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+					>
+						<svg class="size-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3-6 3 3m0 0-3 3m3-3H9" />
+						</svg>
+						Lock session
+					</button>
 					<!-- Dark mode toggle -->
 					<button
 						onclick={() => darkMode.toggle()}
@@ -211,6 +229,13 @@
 				</ul>
 			</nav>
 			<div class="mt-8">
+				<button
+					onclick={signOut}
+					class="mb-4 flex w-full items-center gap-x-3 rounded-md p-2 text-sm font-semibold text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+				>
+					<svg class="size-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3-6 3 3m0 0-3 3m3-3H9" /></svg>
+					Lock session
+				</button>
 				<VersionBadge />
 			</div>
 		</div>
