@@ -304,6 +304,10 @@ fn build_where_sqlite(filters: &ListFilters) -> (String, Vec<String>) {
     if !filters.include_private.unwrap_or(false) {
         conditions.push("is_public = 1".to_string());
     }
+    if !filters.include_ci.unwrap_or(false) {
+        conditions.push("(source IS NULL OR source != ?)".to_string());
+        bind_values.push("CI".to_string());
+    }
     if let Some(ref sys_name) = filters.sys_name {
         conditions.push("sys_name = ?".to_string());
         bind_values.push(sys_name.clone());
