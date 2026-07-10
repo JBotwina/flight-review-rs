@@ -146,7 +146,7 @@
 				<div class="progress-track"><span></span></div>
 			</div>
 		{:else if analysis}
-			<AiAnalysisCard {analysis} />
+			<AiAnalysisCard {analysis} reportId={ctx.logId} />
 		{:else}
 			<div class="empty-dossier">
 				<div class="empty-orbit" aria-hidden="true">

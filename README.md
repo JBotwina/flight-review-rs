@@ -215,7 +215,7 @@ The `metadata.json` includes flight modes, stats, battery summary, GPS quality, 
 
 AI analysis is owned by the Rust API; the OpenRouter key is never sent to the browser. It is strictly opt-in: uploads and seed imports never call OpenRouter unless the caller explicitly selects a non-empty model, and the upload form leaves that choice unchecked by default. After the deterministic converter durably stores the log, an explicitly requested analysis sends OpenRouter a bounded evidence packet containing flight modes, statistics, diagnostics, field summaries, parameter changes, and logged messages. Raw ULog samples, the GPS track, exact coordinates, raw parameters, and the vehicle UUID are excluded.
 
-If OpenRouter fails, the upload still succeeds and the UI offers a retry from the **AI Analysis** tab. Choosing another model regenerates `ai-analysis.json` without changing the deterministic analysis. The UI also shows the configured key's remaining spending limit and usage; OpenRouter keys without a limit are shown as unlimited. The response is an engineering aid and is not an airworthiness determination.
+If OpenRouter fails, the upload still succeeds and the UI offers a retry from the **AI Analysis** tab. Choosing another model regenerates `ai-analysis.json` without changing the deterministic analysis. Saved briefs can be downloaded there as a styled PDF; the lazy-loaded Typst WebAssembly compiler generates the file in the browser without a PDF-generation request to the Rust API. The UI also shows the configured key's remaining spending limit and usage; OpenRouter keys without a limit are shown as unlimited. The response is an engineering aid and is not an airworthiness determination.
 
 Configuration:
 
