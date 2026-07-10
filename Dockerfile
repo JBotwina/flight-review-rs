@@ -33,7 +33,7 @@ RUN npx svelte-kit sync && npm run build
 FROM debian:bookworm-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl jq \
+    && apt-get install -y --no-install-recommends ca-certificates curl gosu jq \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 flightreview \
     && useradd --uid 10001 --gid flightreview --no-create-home --shell /usr/sbin/nologin flightreview
@@ -50,7 +50,8 @@ RUN mkdir -p /data/files \
     && chmod 0755 /usr/local/bin/docker-entrypoint /usr/local/bin/seed-logs \
     && chown -R flightreview:flightreview /data
 
-USER flightreview
+# The entrypoint fixes ownership on root-mounted platform volumes, then
+# immediately drops to this image's unprivileged application account.
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \

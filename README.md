@@ -467,8 +467,9 @@ SPA and Rust API together.
 
 4. Add `OPENROUTER_API_KEY` as a secret variable. Optional variables are listed
    in [`.env.example`](.env.example).
-5. Attach a persistent volume at `/data` for SQLite and set
-   `RAILWAY_RUN_UID=0`; log artifacts live in the Bucket, not the volume.
+5. Attach a persistent volume at `/data` for SQLite. The entrypoint initializes
+   the root-mounted volume and drops to the unprivileged `flightreview` user;
+   log artifacts live in the Bucket, not the volume.
 6. Generate a public domain and deploy. Railway uses `/health` to decide when
    the deployment is ready; the five pinned examples populate in the
    background and are skipped on subsequent starts.

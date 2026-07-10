@@ -1,6 +1,16 @@
 #!/bin/sh
 set -eu
 
+# Railway and Docker named volumes are mounted as root. Initialize ownership
+# before permanently dropping privileges for the server and seed process.
+if [ "$(id -u)" -eq 0 ]; then
+  data_dir="${RAILWAY_VOLUME_MOUNT_PATH:-/data}"
+  if [ -d "$data_dir" ]; then
+    chown -R flightreview:flightreview "$data_dir"
+  fi
+  exec gosu flightreview "$0" "$@"
+fi
+
 case "${1:-}" in
   serve|migrate|-*)
     set -- flight-review-server "$@"

@@ -63,7 +63,6 @@ The volume contains only the SQLite database. Durable log artifacts live in the
 | `OPENROUTER_BASE_URL` | No | `https://openrouter.ai/api/v1` | Override only for a compatible gateway. |
 | `RUST_LOG` | No | `info` | Rust tracing filter. |
 | `SERVER_FEATURES` | Yes | `s3` | Docker build argument. SQLite is a default crate feature; `s3` adds Railway Bucket support. |
-| `RAILWAY_RUN_UID` | Yes | `0` | Railway volumes mount as root; required for write access to `/data`. |
 | `PUBLIC_MAPBOX_TOKEN` | No | — | Build-time browser token for maps. Redeploy after changing it. |
 | `MAPBOX_ACCESS_TOKEN` | No | — | Runtime server token for reverse geocoding. |
 | `STORAGE_URL` | Yes | `s3://${{FlightReviewData.BUCKET}}/flight-review` | Selects the Bucket and isolates app objects under one prefix. |
@@ -85,7 +84,10 @@ The image contains only `seed/logs.json`, not the 268 MB of ULogs. Its startup
 seed pass downloads exact pinned CDN objects, verifies their SHA-256 hashes,
 and sends missing logs through the normal upload API. Existing filenames are
 skipped, so restarts and redeployments do not create duplicates. A failed seed
-pass does not take down the app and is retried on the next start.
+pass does not take down the app and is retried on the next start. The
+entrypoint initializes ownership on Railway's root-mounted volume and
+immediately drops to the unprivileged `flightreview` user before starting the
+server or seed process.
 
 ## Create and share the template
 
