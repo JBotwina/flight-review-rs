@@ -7,7 +7,8 @@
 
 use chrono::{DateTime, Utc};
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
-use serde::{Deserialize, Serialize};
+use schemars::{schema_for, JsonSchema};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 
 const ANALYSIS_SCHEMA_VERSION: u8 = 1;
@@ -165,29 +166,7 @@ impl OpenRouterClient {
         let input_json = serde_json::to_string_pretty(&input)
             .map_err(|e| AiError::InvalidResponse(e.to_string()))?;
 
-        let request = json!({
-            "model": model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT
-                },
-                {
-                    "role": "user",
-                    "content": format!("Analyze this PX4 flight-log evidence. Return only the requested JSON object.\n\n{input_json}")
-                }
-            ],
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "px4_flight_analysis",
-                    "strict": true,
-                    "schema": analysis_response_schema()
-                }
-            },
-            "temperature": 0.15,
-            "max_tokens": 3500
-        });
+        let request = analysis_request(model, &input_json);
 
         let response = self
             .request(
@@ -217,8 +196,7 @@ impl OpenRouterClient {
             .and_then(|choice| choice.message.as_ref())
             .and_then(|message| message.content.as_deref())
             .ok_or(AiError::MissingContent)?;
-        let mut draft = parse_analysis_content(content)?;
-        normalize_analysis(&mut draft);
+        let draft = parse_analysis_content(content)?;
 
         Ok(AiAnalysis {
             schema_version: ANALYSIS_SCHEMA_VERSION,
@@ -226,15 +204,43 @@ impl OpenRouterClient {
             requested_model: model.to_string(),
             model: envelope.model.unwrap_or_else(|| model.to_string()),
             summary: draft.summary,
-            risk_level: draft.risk_level,
-            confidence: draft.confidence.map(|v| v.clamp(0.0, 1.0)),
-            findings: draft.findings,
+            risk_level: draft.risk_level.into(),
+            confidence: draft.confidence.map(|value| value.0),
+            findings: draft.findings.into_iter().map(Into::into).collect(),
             positive_observations: draft.positive_observations,
-            recommendations: draft.recommendations,
+            recommendations: draft.recommendations.into_iter().map(Into::into).collect(),
             limitations: draft.limitations,
             usage: envelope.usage,
         })
     }
+}
+
+fn analysis_request(model: &str, input_json: &str) -> Value {
+    json!({
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT
+            },
+            {
+                "role": "user",
+                "content": format!("Analyze this PX4 flight-log evidence. Return only the requested JSON object.\n\n{input_json}")
+            }
+        ],
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "px4_flight_analysis",
+                "strict": true,
+                "schema": analysis_response_schema()
+            }
+        },
+        "provider": {
+            "require_parameters": true
+        },
+        "max_tokens": 3500
+    })
 }
 
 fn provider_error(status: u16, body: &str) -> AiError {
@@ -496,22 +502,296 @@ struct ChatError {
     message: String,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct AiAnalysisDraft {
-    #[serde(default)]
+    #[schemars(length(min = 1, max = 4000))]
     summary: String,
-    #[serde(default)]
-    risk_level: RiskLevel,
-    #[serde(default)]
-    confidence: Option<f32>,
-    #[serde(default)]
-    findings: Vec<AiFinding>,
-    #[serde(default)]
+    risk_level: RiskLevelDraft,
+    #[serde(deserialize_with = "deserialize_nullable")]
+    #[schemars(required)]
+    confidence: Option<Confidence>,
+    #[schemars(length(max = 12))]
+    findings: Vec<AiFindingDraft>,
+    #[schemars(length(max = 8), inner(length(min = 1, max = 500)))]
     positive_observations: Vec<String>,
-    #[serde(default)]
-    recommendations: Vec<AiRecommendation>,
-    #[serde(default)]
+    #[schemars(length(max = 8))]
+    recommendations: Vec<AiRecommendationDraft>,
+    #[schemars(length(max = 8), inner(length(min = 1, max = 500)))]
     limitations: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(transparent)]
+struct Confidence(#[schemars(range(min = 0.0, max = 1.0))] f32);
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+enum RiskLevelDraft {
+    Low,
+    Moderate,
+    High,
+    Critical,
+    Unknown,
+}
+
+impl From<RiskLevelDraft> for RiskLevel {
+    fn from(risk: RiskLevelDraft) -> Self {
+        match risk {
+            RiskLevelDraft::Low => Self::Low,
+            RiskLevelDraft::Moderate => Self::Moderate,
+            RiskLevelDraft::High => Self::High,
+            RiskLevelDraft::Critical => Self::Critical,
+            RiskLevelDraft::Unknown => Self::Unknown,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+enum FindingCategory {
+    Power,
+    Navigation,
+    Control,
+    Propulsion,
+    Vibration,
+    Logging,
+    Performance,
+    Other,
+}
+
+impl FindingCategory {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Power => "power",
+            Self::Navigation => "navigation",
+            Self::Control => "control",
+            Self::Propulsion => "propulsion",
+            Self::Vibration => "vibration",
+            Self::Logging => "logging",
+            Self::Performance => "performance",
+            Self::Other => "other",
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct AiFindingDraft {
+    category: FindingCategory,
+    severity: FindingSeverityDraft,
+    #[schemars(length(min = 1, max = 240))]
+    title: String,
+    #[schemars(length(min = 1, max = 2000))]
+    explanation: String,
+    #[schemars(length(min = 1, max = 6), inner(length(min = 1, max = 500)))]
+    evidence: Vec<String>,
+    #[serde(deserialize_with = "deserialize_nullable")]
+    #[schemars(required)]
+    time_range_s: Option<TimeRangeDraft>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+enum FindingSeverityDraft {
+    Info,
+    Warning,
+    Critical,
+}
+
+impl From<FindingSeverityDraft> for FindingSeverity {
+    fn from(severity: FindingSeverityDraft) -> Self {
+        match severity {
+            FindingSeverityDraft::Info => Self::Info,
+            FindingSeverityDraft::Warning => Self::Warning,
+            FindingSeverityDraft::Critical => Self::Critical,
+        }
+    }
+}
+
+impl From<AiFindingDraft> for AiFinding {
+    fn from(draft: AiFindingDraft) -> Self {
+        Self {
+            category: draft.category.as_str().to_string(),
+            severity: draft.severity.into(),
+            title: draft.title,
+            explanation: draft.explanation,
+            evidence: draft.evidence,
+            time_range_s: draft.time_range_s.map(Into::into),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct TimeRangeDraft {
+    #[schemars(range(min = 0.0))]
+    start: f64,
+    #[serde(deserialize_with = "deserialize_nullable")]
+    #[schemars(required)]
+    end: Option<f64>,
+}
+
+impl From<TimeRangeDraft> for TimeRange {
+    fn from(draft: TimeRangeDraft) -> Self {
+        Self {
+            start: draft.start,
+            end: draft.end,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct AiRecommendationDraft {
+    priority: RecommendationPriorityDraft,
+    #[schemars(length(min = 1, max = 1000))]
+    action: String,
+    #[schemars(length(min = 1, max = 1000))]
+    rationale: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+enum RecommendationPriorityDraft {
+    High,
+    Medium,
+    Low,
+}
+
+impl From<RecommendationPriorityDraft> for RecommendationPriority {
+    fn from(priority: RecommendationPriorityDraft) -> Self {
+        match priority {
+            RecommendationPriorityDraft::High => Self::High,
+            RecommendationPriorityDraft::Medium => Self::Medium,
+            RecommendationPriorityDraft::Low => Self::Low,
+        }
+    }
+}
+
+impl From<AiRecommendationDraft> for AiRecommendation {
+    fn from(draft: AiRecommendationDraft) -> Self {
+        Self {
+            priority: draft.priority.into(),
+            action: draft.action,
+            rationale: draft.rationale,
+        }
+    }
+}
+
+impl AiAnalysisDraft {
+    fn validate(&self) -> Result<(), AiError> {
+        validate_text("summary", &self.summary, 4_000)?;
+        if let Some(confidence) = &self.confidence {
+            if !(0.0..=1.0).contains(&confidence.0) {
+                return Err(invalid_response("confidence must be between 0 and 1"));
+            }
+        }
+        if self.findings.len() > 12 {
+            return Err(invalid_response("findings must contain at most 12 items"));
+        }
+        for (index, finding) in self.findings.iter().enumerate() {
+            finding.validate(index)?;
+        }
+        validate_text_list("positive_observations", &self.positive_observations, 8, 500)?;
+        if self.recommendations.len() > 8 {
+            return Err(invalid_response(
+                "recommendations must contain at most 8 items",
+            ));
+        }
+        for (index, recommendation) in self.recommendations.iter().enumerate() {
+            validate_text(
+                &format!("recommendations[{index}].action"),
+                &recommendation.action,
+                1_000,
+            )?;
+            validate_text(
+                &format!("recommendations[{index}].rationale"),
+                &recommendation.rationale,
+                1_000,
+            )?;
+        }
+        validate_text_list("limitations", &self.limitations, 8, 500)
+    }
+}
+
+impl AiFindingDraft {
+    fn validate(&self, index: usize) -> Result<(), AiError> {
+        validate_text(&format!("findings[{index}].title"), &self.title, 240)?;
+        validate_text(
+            &format!("findings[{index}].explanation"),
+            &self.explanation,
+            2_000,
+        )?;
+        validate_text_list(
+            &format!("findings[{index}].evidence"),
+            &self.evidence,
+            6,
+            500,
+        )?;
+        if self.evidence.is_empty() {
+            return Err(invalid_response(format!(
+                "findings[{index}].evidence must not be empty"
+            )));
+        }
+        if let Some(range) = &self.time_range_s {
+            if range.start < 0.0 {
+                return Err(invalid_response(format!(
+                    "findings[{index}].time_range_s.start must be non-negative"
+                )));
+            }
+            if let Some(end) = range.end {
+                if end < range.start {
+                    return Err(invalid_response(format!(
+                        "findings[{index}].time_range_s.end must not precede start"
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+fn validate_text(label: &str, value: &str, max_chars: usize) -> Result<(), AiError> {
+    let length = value.chars().count();
+    if value.trim().is_empty() {
+        return Err(invalid_response(format!("{label} must not be empty")));
+    }
+    if length > max_chars {
+        return Err(invalid_response(format!(
+            "{label} must contain at most {max_chars} characters"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_text_list(
+    label: &str,
+    values: &[String],
+    max_items: usize,
+    max_chars: usize,
+) -> Result<(), AiError> {
+    if values.len() > max_items {
+        return Err(invalid_response(format!(
+            "{label} must contain at most {max_items} items"
+        )));
+    }
+    for (index, value) in values.iter().enumerate() {
+        validate_text(&format!("{label}[{index}]"), value, max_chars)?;
+    }
+    Ok(())
+}
+
+fn invalid_response(message: impl Into<String>) -> AiError {
+    AiError::InvalidResponse(message.into())
+}
+
+fn deserialize_nullable<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer)
 }
 
 fn parse_analysis_content(content: &str) -> Result<AiAnalysisDraft, AiError> {
@@ -525,88 +805,17 @@ fn parse_analysis_content(content: &str) -> Result<AiAnalysisDraft, AiError> {
         .trim();
     let draft: AiAnalysisDraft =
         serde_json::from_str(unwrapped).map_err(|e| AiError::InvalidResponse(e.to_string()))?;
-    if draft.summary.trim().is_empty() {
-        return Err(AiError::InvalidResponse(
-            "response did not include a summary".to_string(),
-        ));
-    }
+    draft.validate()?;
     Ok(draft)
 }
 
-fn normalize_analysis(draft: &mut AiAnalysisDraft) {
-    draft.summary.truncate(4_000);
-    draft.findings.truncate(12);
-    for finding in &mut draft.findings {
-        finding.title.truncate(240);
-        finding.explanation.truncate(2_000);
-        finding.evidence.truncate(6);
-        for evidence in &mut finding.evidence {
-            evidence.truncate(500);
-        }
-    }
-    draft.positive_observations.truncate(8);
-    draft.recommendations.truncate(8);
-    draft.limitations.truncate(8);
-}
-
 fn analysis_response_schema() -> Value {
-    json!({
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-            "summary": { "type": "string" },
-            "risk_level": { "type": "string", "enum": ["low", "moderate", "high", "critical", "unknown"] },
-            "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
-            "findings": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                        "category": { "type": "string" },
-                        "severity": { "type": "string", "enum": ["info", "warning", "critical"] },
-                        "title": { "type": "string" },
-                        "explanation": { "type": "string" },
-                        "evidence": { "type": "array", "items": { "type": "string" } },
-                        "time_range_s": {
-                            "anyOf": [
-                                { "type": "null" },
-                                {
-                                    "type": "object",
-                                    "additionalProperties": false,
-                                    "properties": {
-                                        "start": { "type": "number" },
-                                        "end": { "type": ["number", "null"] }
-                                    },
-                                    "required": ["start", "end"]
-                                }
-                            ]
-                        }
-                    },
-                    "required": ["category", "severity", "title", "explanation", "evidence", "time_range_s"]
-                }
-            },
-            "positive_observations": { "type": "array", "items": { "type": "string" } },
-            "recommendations": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                        "priority": { "type": "string", "enum": ["high", "medium", "low"] },
-                        "action": { "type": "string" },
-                        "rationale": { "type": "string" }
-                    },
-                    "required": ["priority", "action", "rationale"]
-                }
-            },
-            "limitations": { "type": "array", "items": { "type": "string" } }
-        },
-        "required": [
-            "summary", "risk_level", "confidence", "findings",
-            "positive_observations", "recommendations", "limitations"
-        ]
-    })
+    let mut schema = serde_json::to_value(schema_for!(AiAnalysisDraft))
+        .expect("AI analysis schema must serialize");
+    if let Value::Object(root) = &mut schema {
+        root.remove("$schema");
+    }
+    schema
 }
 
 fn value_at(metadata: &Value, pointer: &str) -> Value {
@@ -715,6 +924,16 @@ mod tests {
     }
 
     #[test]
+    fn structured_output_request_avoids_optional_sampling_parameters() {
+        let request = analysis_request("openai/gpt-5.6-luna", "{}");
+
+        assert!(request.get("temperature").is_none());
+        assert_eq!(request["provider"]["require_parameters"], true);
+        assert_eq!(request["response_format"]["type"], "json_schema");
+        assert_eq!(request["max_tokens"], 3500);
+    }
+
+    #[test]
     fn input_excludes_sensitive_and_large_fields() {
         let metadata = json!({
             "sys_uuid": "secret-id",
@@ -733,11 +952,152 @@ mod tests {
 
     #[test]
     fn parses_fenced_json_for_less_strict_models() {
-        let draft = parse_analysis_content(
-            "```json\n{\"summary\":\"Nominal flight.\",\"risk_level\":\"low\"}\n```",
-        )
-        .unwrap();
+        let content = serde_json::to_string(&valid_analysis_json()).unwrap();
+        let draft = parse_analysis_content(&format!("```json\n{content}\n```")).unwrap();
         assert_eq!(draft.summary, "Nominal flight.");
+    }
+
+    fn valid_analysis_json() -> Value {
+        json!({
+            "summary": "Nominal flight.",
+            "risk_level": "low",
+            "confidence": 0.8,
+            "findings": [{
+                "category": "logging",
+                "severity": "info",
+                "title": "Complete log",
+                "explanation": "No dropouts were reported.",
+                "evidence": ["dropout_count was 0"],
+                "time_range_s": null
+            }],
+            "positive_observations": ["The log was complete."],
+            "recommendations": [{
+                "priority": "low",
+                "action": "Review the plots.",
+                "rationale": "Confirm the aggregate evidence."
+            }],
+            "limitations": ["Only bounded evidence was supplied."]
+        })
+    }
+
+    #[test]
+    fn rejects_missing_required_analysis_fields() {
+        let mut value = valid_analysis_json();
+        value.as_object_mut().unwrap().remove("findings");
+
+        assert!(parse_analysis_content(&value.to_string()).is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_analysis_fields() {
+        let mut value = valid_analysis_json();
+        value["invented"] = json!(true);
+
+        assert!(parse_analysis_content(&value.to_string()).is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_analysis_enums() {
+        let mut value = valid_analysis_json();
+        value["risk_level"] = json!("catastrophic");
+
+        assert!(parse_analysis_content(&value.to_string()).is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_finding_severity_and_recommendation_priority() {
+        let mut value = valid_analysis_json();
+        value["findings"][0]["severity"] = json!("unknown");
+        assert!(parse_analysis_content(&value.to_string()).is_err());
+
+        let mut value = valid_analysis_json();
+        value["recommendations"][0]["priority"] = json!("unknown");
+        assert!(parse_analysis_content(&value.to_string()).is_err());
+    }
+
+    #[test]
+    fn rejects_out_of_range_confidence() {
+        let mut value = valid_analysis_json();
+        value["confidence"] = json!(1.2);
+
+        assert!(parse_analysis_content(&value.to_string()).is_err());
+    }
+
+    #[test]
+    fn rejects_findings_without_evidence() {
+        let mut value = valid_analysis_json();
+        value["findings"][0]["evidence"] = json!([]);
+
+        assert!(parse_analysis_content(&value.to_string()).is_err());
+    }
+
+    #[test]
+    fn requires_nullable_fields_to_be_present() {
+        let mut value = valid_analysis_json();
+        value.as_object_mut().unwrap().remove("confidence");
+        assert!(parse_analysis_content(&value.to_string()).is_err());
+
+        let mut value = valid_analysis_json();
+        value["findings"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("time_range_s");
+        assert!(parse_analysis_content(&value.to_string()).is_err());
+    }
+
+    #[test]
+    fn generated_schema_is_strict_and_requires_every_top_level_field() {
+        let schema = analysis_response_schema();
+        assert_eq!(schema["additionalProperties"], false);
+        assert!(schema.get("$schema").is_none());
+
+        let required = schema["required"].as_array().unwrap();
+        for field in [
+            "summary",
+            "risk_level",
+            "confidence",
+            "findings",
+            "positive_observations",
+            "recommendations",
+            "limitations",
+        ] {
+            assert!(required.iter().any(|item| item == field), "missing {field}");
+        }
+
+        assert_every_schema_object_is_strict(&schema, "root");
+    }
+
+    fn assert_every_schema_object_is_strict(schema: &Value, path: &str) {
+        match schema {
+            Value::Object(object) => {
+                if let Some(Value::Object(properties)) = object.get("properties") {
+                    assert_eq!(
+                        object.get("additionalProperties"),
+                        Some(&Value::Bool(false)),
+                        "{path} must reject additional properties"
+                    );
+                    let required = object
+                        .get("required")
+                        .and_then(Value::as_array)
+                        .unwrap_or_else(|| panic!("{path} must declare required properties"));
+                    for property in properties.keys() {
+                        assert!(
+                            required.iter().any(|item| item == property),
+                            "{path}.{property} must be required"
+                        );
+                    }
+                }
+                for (key, value) in object {
+                    assert_every_schema_object_is_strict(value, &format!("{path}.{key}"));
+                }
+            }
+            Value::Array(items) => {
+                for (index, item) in items.iter().enumerate() {
+                    assert_every_schema_object_is_strict(item, &format!("{path}[{index}]"));
+                }
+            }
+            _ => {}
+        }
     }
 
     #[test]

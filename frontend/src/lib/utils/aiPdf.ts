@@ -76,15 +76,18 @@ export function buildAiAnalysisTypst(analysis: AiAnalysis, reportId?: string): s
   const reportReference = cleanText(reportId?.trim() || 'SAVED ANALYSIS');
 
   return `#let ink = rgb("#10262d")
+#let body-ink = rgb("#1a3339")
 #let navy = rgb("#071823")
 #let teal = rgb("#29777d")
 #let acid = rgb("#c8ef4b")
-#let muted = rgb("#667b7d")
+#let muted = rgb("#5a6e71")
 #let line-color = rgb("#cad3cf")
 #let paper = rgb("#f8f8f3")
 #let soft = rgb("#edf1ed")
 #let warning = rgb("#a66b08")
 #let critical = rgb("#b43d34")
+#let mono = "DejaVu Sans Mono"
+#let prose = "DejaVu Sans"
 
 #let report-id = ${typstString(reportReference)}
 #let generated-at = ${typstString(generatedAt)}
@@ -110,7 +113,7 @@ export function buildAiAnalysisTypst(analysis: AiAnalysis, reportId?: string): s
   fill: paper,
   margin: (x: 16mm, top: 15mm, bottom: 19mm),
   footer: context {
-    set text(font: "DejaVu Sans Mono", size: 6pt, fill: muted)
+    set text(font: mono, size: 6.5pt, fill: muted, tracking: 0pt)
     line(length: 100%, stroke: 0.5pt + line-color)
     v(4pt)
     grid(
@@ -120,10 +123,10 @@ export function buildAiAnalysisTypst(analysis: AiAnalysis, reportId?: string): s
     )
   },
 )
-#set text(font: "DejaVu Sans Mono", size: 8.5pt, fill: ink)
-#set par(justify: false, leading: 0.68em)
+#set text(font: prose, size: 9pt, fill: ink, tracking: 0pt)
+#set par(justify: false, leading: 0.72em)
 
-#let eyebrow(body) = text(size: 6pt, weight: "bold", tracking: 0.7pt, fill: teal, body)
+#let eyebrow(body) = text(font: mono, size: 6.5pt, weight: "bold", tracking: 0.2pt, fill: teal, body)
 #let section-title(index, title) = block(above: 8pt, below: 7pt)[
   #eyebrow(index)
   #v(2pt)
@@ -132,9 +135,9 @@ export function buildAiAnalysisTypst(analysis: AiAnalysis, reportId?: string): s
 #let severity-color(value) = if value == "critical" { critical } else if value == "warning" { warning } else { teal }
 #let two-digit(value) = if value < 10 { "0" + str(value) } else { str(value) }
 #let metadata(label, value) = [
-  #text(size: 5.5pt, weight: "bold", tracking: 0.5pt, fill: muted)[#label]
+  #text(font: mono, size: 5.5pt, weight: "bold", tracking: 0.2pt, fill: muted)[#label]
   #linebreak()
-  #text(size: 6.5pt, fill: ink)[#value]
+  #text(font: mono, size: 7pt, fill: ink)[#value]
 ]
 
 #block(fill: navy, inset: 15pt, radius: 3pt, width: 100%)[
@@ -143,22 +146,22 @@ export function buildAiAnalysisTypst(analysis: AiAnalysis, reportId?: string): s
     column-gutter: 12pt,
     align: (left + horizon, right + horizon),
     [
-      #text(size: 6pt, weight: "bold", tracking: 1pt, fill: acid)[PX4 / FLIGHT INTELLIGENCE]
+      #text(font: mono, size: 6.5pt, weight: "bold", tracking: 0.3pt, fill: acid)[PX4 / FLIGHT INTELLIGENCE]
       #v(11pt)
       #text(size: 23pt, weight: "bold", fill: white)[SECOND-OPINION\\
       FLIGHT BRIEF]
       #v(7pt)
-      #text(size: 7pt, fill: rgb("#9db3b5"))[Evidence-backed AI analysis / #report-id]
+      #text(size: 8pt, fill: rgb("#b7cbcd"))[Evidence-backed AI analysis / #report-id]
     ],
     [
       #box(stroke: 0.7pt + rgb("#6f898d"), inset: (x: 10pt, y: 9pt), radius: 2pt)[
         #align(center)[
-          #text(size: 5.5pt, tracking: 0.7pt, fill: rgb("#9db3b5"))[ASSESSMENT]
+          #text(font: mono, size: 6pt, tracking: 0.2pt, fill: rgb("#b7cbcd"))[ASSESSMENT]
           #linebreak()
           #text(size: 15pt, weight: "bold", fill: acid)[#risk-label]
           #if confidence != none [
             #linebreak()
-            #text(size: 6pt, fill: rgb("#9db3b5"))[#confidence% CONFIDENCE]
+            #text(font: mono, size: 6.5pt, fill: rgb("#b7cbcd"))[#confidence% CONFIDENCE]
           ]
         ]
       ]
@@ -169,26 +172,26 @@ export function buildAiAnalysisTypst(analysis: AiAnalysis, reportId?: string): s
 #v(12pt)
 #eyebrow("00 / EXECUTIVE READOUT")
 #v(4pt)
-#text(size: 10pt, fill: rgb("#354f53"))[#summary]
+#text(size: 10.5pt, fill: body-ink)[#summary]
 
 #section-title("01 / OBSERVATIONS", "Evidence-backed findings")
 #if findings.len() == 0 [
   #block(fill: rgb("#edf6f0"), stroke: 0.6pt + rgb("#9fcab9"), inset: 10pt, width: 100%, radius: 2pt)[
     #text(weight: "bold", fill: rgb("#26634f"))[NO ANOMALY FINDINGS]
     #linebreak()
-    #text(size: 7pt, fill: muted)[The supplied evidence did not produce a reportable anomaly.]
+    #text(size: 8pt, fill: muted)[The supplied evidence did not produce a reportable anomaly.]
   ]
 ] else {
   for (index, finding) in findings.enumerate() [
     #block(stroke: (left: 2.5pt + severity-color(finding.severity), rest: 0.5pt + line-color), inset: 10pt, width: 100%, radius: 1.5pt, below: 7pt)[
       #grid(columns: (1fr, auto), column-gutter: 8pt,
-        [#text(size: 6pt, weight: "bold", tracking: 0.5pt, fill: severity-color(finding.severity))[#finding.code / #upper(finding.severity) / #upper(finding.category)]],
-        [#if finding.time != none { text(size: 6pt, fill: muted, finding.time) }],
+        [#text(font: mono, size: 6.5pt, weight: "bold", tracking: 0.15pt, fill: severity-color(finding.severity))[#finding.code / #upper(finding.severity) / #upper(finding.category)]],
+        [#if finding.time != none { text(font: mono, size: 6.5pt, fill: muted, finding.time) }],
       )
       #v(5pt)
       #text(size: 11pt, weight: "bold")[#two-digit(index + 1)  #finding.title]
       #v(4pt)
-      #text(size: 7.5pt, fill: rgb("#40585c"))[#finding.explanation]
+      #text(size: 9pt, fill: body-ink)[#finding.explanation]
       #if finding.evidence.len() > 0 [
         #v(6pt)
         #block(fill: soft, inset: 7pt, width: 100%, radius: 1pt)[
@@ -196,8 +199,8 @@ export function buildAiAnalysisTypst(analysis: AiAnalysis, reportId?: string): s
           #v(3pt)
           #for evidence in finding.evidence [
             #grid(columns: (7pt, 1fr), column-gutter: 3pt,
-              [#text(fill: teal, size: 7pt)[+]],
-              [#text(size: 6.8pt, fill: rgb("#40585c"))[#evidence]],
+              [#text(fill: teal, size: 8pt)[+]],
+              [#text(size: 8pt, fill: body-ink)[#evidence]],
             )
             #v(2pt)
           ]
@@ -209,12 +212,12 @@ export function buildAiAnalysisTypst(analysis: AiAnalysis, reportId?: string): s
 
 #section-title("02 / NOMINAL SIGNALS", "Positive observations")
 #if positives.len() == 0 [
-  #text(size: 7.5pt, fill: muted)[No positive observations were returned.]
+  #text(size: 8.5pt, fill: muted)[No positive observations were returned.]
 ] else {
   for (index, observation) in positives.enumerate() [
     #grid(columns: (19pt, 1fr), column-gutter: 7pt,
-      [#box(fill: navy, inset: (x: 5pt, y: 3pt), radius: 1pt)[#text(size: 6pt, weight: "bold", fill: acid)[#two-digit(index + 1)]]],
-      [#text(size: 7.5pt, fill: rgb("#40585c"))[#observation]],
+      [#box(fill: navy, inset: (x: 5pt, y: 3pt), radius: 1pt)[#text(font: mono, size: 6pt, weight: "bold", fill: acid)[#two-digit(index + 1)]]],
+      [#text(size: 9pt, fill: body-ink)[#observation]],
     )
     #v(5pt)
   ]
@@ -222,18 +225,18 @@ export function buildAiAnalysisTypst(analysis: AiAnalysis, reportId?: string): s
 
 #section-title("03 / NEXT ACTIONS", "Recommended follow-up")
 #if recommendations.len() == 0 [
-  #text(size: 7.5pt, fill: muted)[No follow-up actions were returned.]
+  #text(size: 8.5pt, fill: muted)[No follow-up actions were returned.]
 ] else {
   for (index, recommendation) in recommendations.enumerate() [
     #block(fill: soft, inset: 9pt, width: 100%, radius: 2pt, below: 6pt)[
       #grid(columns: (24pt, 1fr), column-gutter: 8pt,
-        [#box(fill: navy, inset: 6pt, radius: 1pt)[#align(center)[#text(size: 7pt, weight: "bold", fill: acid)[#str(index + 1)]]]],
+        [#box(fill: navy, inset: 6pt, radius: 1pt)[#align(center)[#text(font: mono, size: 7pt, weight: "bold", fill: acid)[#str(index + 1)]]]],
         [
           #eyebrow(recommendation.priority + " PRIORITY")
           #linebreak()
-          #text(size: 9pt, weight: "bold")[#recommendation.action]
+          #text(size: 10pt, weight: "bold")[#recommendation.action]
           #v(3pt)
-          #text(size: 7pt, fill: muted)[#recommendation.rationale]
+          #text(size: 8.5pt, fill: body-ink)[#recommendation.rationale]
         ],
       )
     ]
@@ -245,8 +248,8 @@ export function buildAiAnalysisTypst(analysis: AiAnalysis, reportId?: string): s
   #block(stroke: 0.6pt + line-color, inset: 9pt, width: 100%, radius: 2pt)[
     #for limitation in limitations [
       #grid(columns: (7pt, 1fr), column-gutter: 4pt,
-        [#text(fill: warning)[!]],
-        [#text(size: 7pt, fill: muted)[#limitation]],
+        [#text(fill: warning, "!")],
+        [#text(size: 8.5pt, fill: body-ink)[#limitation]],
       )
       #v(3pt)
     ]
@@ -265,9 +268,9 @@ export function buildAiAnalysisTypst(analysis: AiAnalysis, reportId?: string): s
 )
 #v(10pt)
 #block(fill: rgb("#fff3df"), inset: 8pt, width: 100%, radius: 2pt)[
-  #text(size: 6pt, weight: "bold", tracking: 0.5pt, fill: warning)[ENGINEERING AID]
+  #text(font: mono, size: 6.5pt, weight: "bold", tracking: 0.2pt, fill: warning)[ENGINEERING AID]
   #linebreak()
-  #text(size: 6.5pt, fill: rgb("#6d5939"))[AI output is not an airworthiness determination. Verify findings against plots, messages, and deterministic diagnostics.]
+  #text(size: 7.5pt, fill: rgb("#5c4a2f"))[AI output is not an airworthiness determination. Verify findings against plots, messages, and deterministic diagnostics.]
 ]
 `;
 }
@@ -283,18 +286,22 @@ export function aiAnalysisPdfFilename(reportId?: string, generatedAt?: string): 
 async function getTypstCompiler(): Promise<TypstModule['$typst']> {
   if (!typstPromise) {
     typstPromise = (async () => {
-      const [typst, wasm, regular, bold] = await Promise.all([
+      const [typst, wasm, monoRegular, monoBold, sansRegular, sansBold] = await Promise.all([
         import('@myriaddreamin/typst.ts'),
         import('@myriaddreamin/typst-ts-web-compiler/wasm?url'),
         import('dejavu-fonts-ttf/ttf/DejaVuSansMono.ttf?url'),
         import('dejavu-fonts-ttf/ttf/DejaVuSansMono-Bold.ttf?url'),
+        import('dejavu-fonts-ttf/ttf/DejaVuSans.ttf?url'),
+        import('dejavu-fonts-ttf/ttf/DejaVuSans-Bold.ttf?url'),
       ]);
 
       typst.$typst.setCompilerInitOptions({
         getModule: () => wasm.default,
         beforeBuild: [typst.loadFonts([
-          regular.default,
-          bold.default,
+          monoRegular.default,
+          monoBold.default,
+          sansRegular.default,
+          sansBold.default,
         ], { assets: false })],
       });
       return typst.$typst;

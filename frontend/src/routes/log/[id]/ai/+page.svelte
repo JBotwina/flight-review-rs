@@ -3,6 +3,7 @@
 	import { ApiError, generateAiAnalysis, getAiAnalysis, getAiBalance, getAiModels } from '$lib/api';
 	import type { AiAnalysis, AiBalanceResponse, AiModel } from '$lib/types';
 	import AiAnalysisCard from '$lib/components/ai/AiAnalysisCard.svelte';
+	import AiWorkingState from '$lib/components/ai/AiWorkingState.svelte';
 	import ModelPicker from '$lib/components/ai/ModelPicker.svelte';
 	import OpenRouterBalance from '$lib/components/ai/OpenRouterBalance.svelte';
 	import LoadingSpinner from '$lib/components/shared/LoadingSpinner.svelte';
@@ -76,7 +77,7 @@
 	<title>Flight Intelligence - Flight Review</title>
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-	<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+	<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 </svelte:head>
 
 {#if loading}
@@ -92,7 +93,6 @@
 				<div class="kicker"><span></span> PX4 / FLIGHT INTELLIGENCE</div>
 				<p class="report-number">SECOND OPINION · REPORT CHANNEL 02</p>
 				<h2>Interrogate the<br /><em>flight evidence.</em></h2>
-				<p class="deck-copy">A model reviews the bounded diagnostic record—not raw position samples—and produces a saved engineering brief. Rust analysis remains the source evidence.</p>
 				<div class="evidence-key">
 					<span><i>01</i> Modes</span>
 					<span><i>02</i> Diagnostics</span>
@@ -137,14 +137,7 @@
 		{/if}
 
 		{#if generating}
-			<div class="analysis-progress">
-				<div class="sweep" aria-hidden="true"></div>
-				<div class="progress-index">AI / WORKING</div>
-				<div class="progress-spinner"><LoadingSpinner /></div>
-				<h3>Correlating flight evidence</h3>
-				<p>The model is cross-referencing modes, diagnostics, logged messages, parameters, and field statistics.</p>
-				<div class="progress-track"><span></span></div>
-			</div>
+			<AiWorkingState />
 		{:else if analysis}
 			<AiAnalysisCard {analysis} reportId={ctx.logId} />
 		{:else}
@@ -174,7 +167,6 @@
 	.report-number { margin: 3.4rem 0 .8rem; color: #6c8e94; font-size: .58rem; letter-spacing: .14em; }
 	h2 { margin: 0; font-family: 'Barlow Condensed', sans-serif; font-size: clamp(3.4rem, 6vw, 6rem); font-weight: 600; line-height: .82; letter-spacing: -.03em; text-transform: uppercase; }
 	h2 em { color: transparent; font-style: normal; -webkit-text-stroke: 1px rgba(233,243,239,.72); }
-	.deck-copy { max-width: 43rem; margin: 1.7rem 0 0; color: #95adb0; font-size: .73rem; line-height: 1.75; }
 	.evidence-key { display: flex; flex-wrap: wrap; gap: 1rem 1.4rem; margin-top: 2rem; color: #91a7aa; font-size: .59rem; text-transform: uppercase; }
 	.evidence-key i { margin-right: .3rem; color: var(--cyan); font-style: normal; }
 	.request-console { position: relative; z-index: 2; margin: 1.25rem; align-self: stretch; border: 1px solid rgba(136,217,223,.22); background: rgba(3,13,20,.72); clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); }
@@ -196,16 +188,10 @@
 	.intel-error { display: grid; grid-template-columns: auto 1fr; gap: 1rem; margin-top: 1rem; border-left: 3px solid #d95f4d; padding: 1rem 1.2rem; background: #fff3ef; color: #792f26; font-size: .72rem; }
 	.intel-error span { font-size: .58rem; font-weight: 600; letter-spacing: .12em; }
 	.intel-error p { margin: 0; }
-	.analysis-progress, .empty-dossier { position: relative; overflow: hidden; margin-top: 1rem; border: 1px solid #cbd3cf; background: var(--paper); text-align: center; }
-	.analysis-progress { min-height: 25rem; display: grid; place-items: center; align-content: center; padding: 3rem; }
-	.sweep { position: absolute; inset: 0; background: linear-gradient(110deg, transparent 38%, rgba(65,129,133,.08) 49%, transparent 60%); animation: sweep 2.8s linear infinite; }
-	.progress-index, .empty-index { color: #758889; font-size: .58rem; letter-spacing: .19em; }
-	.progress-spinner { width: 3.3rem; height: 3.3rem; display: grid; place-items: center; margin: 1.3rem auto; border: 1px solid #b6c4c0; color: #12636c; transform: rotate(45deg); }
-	.progress-spinner :global(*) { transform: rotate(-45deg); }
-	.analysis-progress h3, .empty-dossier h3 { margin: 0; font-family: 'Barlow Condensed', sans-serif; font-size: 2rem; font-weight: 600; text-transform: uppercase; }
-	.analysis-progress p, .empty-dossier > p:last-child { max-width: 36rem; margin: .7rem auto 0; color: #687b7c; font-size: .7rem; line-height: 1.7; }
-	.progress-track { width: min(24rem, 70vw); height: 2px; margin-top: 2rem; background: #d5dcda; overflow: hidden; }
-	.progress-track span { display: block; width: 36%; height: 100%; background: #176973; animation: progress 1.7s ease-in-out infinite alternate; }
+	.empty-dossier { position: relative; overflow: hidden; margin-top: 1rem; border: 1px solid #cbd3cf; background: var(--paper); text-align: center; }
+	.empty-index { color: #758889; font-size: .58rem; letter-spacing: .19em; }
+	.empty-dossier h3 { margin: 0; font-family: 'Barlow Condensed', sans-serif; font-size: 2rem; font-weight: 600; text-transform: uppercase; }
+	.empty-dossier > p:last-child { max-width: 36rem; margin: .7rem auto 0; color: #687b7c; font-size: .7rem; line-height: 1.7; }
 	.empty-dossier { min-height: 24rem; display: grid; place-items: center; align-content: center; padding: 3rem; background-image: linear-gradient(rgba(30,68,72,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(30,68,72,.04) 1px, transparent 1px); background-size: 30px 30px; }
 	.empty-orbit { width: 5rem; height: 5rem; margin-bottom: 1.2rem; color: #7c9998; }
 	.empty-orbit svg { width: 100%; stroke: currentColor; stroke-width: 1; }
@@ -213,9 +199,6 @@
 	.page-caveat span { flex: none; color: #385b5f; font-weight: 600; letter-spacing: .1em; }
 	.intel-loading { min-height: 28rem; display: grid; place-items: center; align-content: center; background: #071823; color: #91aeb0; font: 500 .62rem 'IBM Plex Mono', monospace; letter-spacing: .15em; text-transform: uppercase; }
 	.loading-radar { width: 3rem; height: 3rem; display: grid; place-items: center; margin-bottom: 1rem; color: #c8ef4b; }
-	@keyframes sweep { from { transform: translateX(-70%); } to { transform: translateX(70%); } }
-	@keyframes progress { from { transform: translateX(-20%); } to { transform: translateX(195%); } }
 	@media (max-width: 900px) { .control-deck { grid-template-columns: 1fr; } .request-console { margin-top: 0; } .report-number { margin-top: 2.4rem; } }
 	@media (max-width: 520px) { .deck-intro { padding: 1.5rem; } h2 { font-size: 3.3rem; } .request-console { margin: .7rem; } .model-readout { grid-template-columns: 1fr; gap: .35rem; } .model-readout b { display: none; } .page-caveat { display: block; } .page-caveat span { display: block; margin-bottom: .35rem; } }
-	@media (prefers-reduced-motion: reduce) { .sweep, .progress-track span { animation: none; } }
 </style>

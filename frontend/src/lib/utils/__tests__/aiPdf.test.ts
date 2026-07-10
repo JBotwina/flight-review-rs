@@ -45,6 +45,10 @@ describe('buildAiAnalysisTypst', () => {
     expect(source).toContain('provider/model-v1');
     expect(source).toContain('#let confidence = 88');
     expect(source).toContain('#let token-load = 150');
+    expect(source).toContain('#let prose = "DejaVu Sans"');
+    expect(source).toContain('#let mono = "DejaVu Sans Mono"');
+    expect(source).toContain('#set text(font: prose, size: 9pt, fill: ink, tracking: 0pt)');
+    expect(source).toMatch(/#if limitations\.len\(\) > 0 \[[\s\S]*?\n\]\n/);
   });
 
   it('escapes model text and normalizes typographic dashes for PDF portability', () => {
