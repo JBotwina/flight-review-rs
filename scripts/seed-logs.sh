@@ -6,13 +6,14 @@ MANIFEST="${SEED_MANIFEST:-/usr/share/flight-review/seed/logs.json}"
 API_URL="${SEED_API_URL:-http://127.0.0.1:${PORT:-8080}}"
 WORK_DIR="${SEED_WORK_DIR:-/tmp/flight-review-seed}"
 PUBLIC="${SEED_LOGS_PUBLIC:-true}"
+COOKIE_JAR="$WORK_DIR/access.cookies"
 
 log() {
   printf '%s %s\n' '[seed]' "$*"
 }
 
 upload_log() {
-  curl -sS -o "$response" -w '%{http_code}' -X POST "$API_URL/api/upload" \
+  curl -sS -b "$COOKIE_JAR" -o "$response" -w '%{http_code}' -X POST "$API_URL/api/upload" \
     -F "file=@$input;filename=$filename" \
     -F "is_public=$PUBLIC" \
     -F "description=$description" \
@@ -36,6 +37,7 @@ test -f "$MANIFEST" || {
 
 mkdir -p "$WORK_DIR"
 trap 'rm -rf "$WORK_DIR"' EXIT INT TERM
+: > "$COOKIE_JAR"
 
 ready=false
 attempt=0
@@ -51,6 +53,15 @@ done
 if [ "$ready" != true ]; then
   log "server did not become ready at $API_URL"
   exit 1
+fi
+
+if [ -n "${ACCESS_PASSWORD:-}" ]; then
+  if ! jq -nc --arg password "$ACCESS_PASSWORD" '{password: $password}' \
+    | curl -fsS -c "$COOKIE_JAR" -H 'Content-Type: application/json' \
+      --data-binary @- "$API_URL/api/auth/login" >/dev/null; then
+    log "could not authenticate the seed importer"
+    exit 1
+  fi
 fi
 
 total=$(jq -r '.logs | length' "$MANIFEST")
@@ -71,7 +82,7 @@ while IFS= read -r entry; do
   description=$(printf '%s' "$entry" | jq -r '.description')
   filename="${source_id}.ulg"
 
-  if curl -fsS "$API_URL/api/logs?include_private=true&limit=10&search=$source_id" \
+  if curl -fsS -b "$COOKIE_JAR" "$API_URL/api/logs?include_private=true&limit=10&search=$source_id" \
     | jq -e --arg filename "$filename" '.logs | any(.filename == $filename)' >/dev/null; then
     log "already present: $filename"
     skipped=$((skipped + 1))

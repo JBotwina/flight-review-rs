@@ -57,6 +57,7 @@ The volume contains only the SQLite database. Durable log artifacts live in the
 
 | Variable | Required | Default | Notes |
 |----------|----------|---------|-------|
+| `ACCESS_PASSWORD` | Yes | — | Shared pilot password. Store as a sealed secret; PR environments inherit it from staging. |
 | `OPENROUTER_API_KEY` | Yes | — | Mark as a secret. Never bake it into the image. |
 | `OPENROUTER_DEFAULT_MODEL` | No | `openrouter/auto` | Preselected only after a user opts in to AI analysis; it never triggers analysis by itself. |
 | `OPENROUTER_APP_NAME` | No | `PX4 Flight Review` | OpenRouter attribution title. |

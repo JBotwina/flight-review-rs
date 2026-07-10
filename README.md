@@ -222,7 +222,8 @@ Configuration:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OPENROUTER_API_KEY` | unset | Enables model discovery and AI analysis |
-| `OPENROUTER_DEFAULT_MODEL` | `openrouter/auto` | Model used when an uploader does not choose one |
+| `ACCESS_PASSWORD` | unset locally; required on Railway | Enables the shared pilot login and signed access session |
+| `OPENROUTER_DEFAULT_MODEL` | `openrouter/auto` | Model preselected only after a user opts in to AI analysis |
 | `OPENROUTER_APP_NAME` | `PX4 Flight Review` | OpenRouter attribution title |
 | `OPENROUTER_SITE_URL` | unset | Optional OpenRouter attribution URL |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | Override for testing or a compatible gateway |
