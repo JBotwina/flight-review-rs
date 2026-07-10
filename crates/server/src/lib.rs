@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod api;
+pub mod auth;
 pub mod db;
 pub mod extract;
 pub mod geocode;
@@ -7,11 +8,11 @@ pub mod storage;
 
 use axum::{
     extract::DefaultBodyLimit,
+    middleware,
     routing::{get, post},
     Router,
 };
 use std::sync::Arc;
-use tower_http::cors::CorsLayer;
 
 /// Shared application state passed to all handlers via axum's State extractor.
 pub struct AppState {
@@ -26,13 +27,14 @@ pub struct AppState {
     pub http_client: reqwest::Client,
     /// OpenRouter client. None when OPENROUTER_API_KEY is not configured.
     pub openrouter: Option<ai::OpenRouterClient>,
+    /// Shared-password access control. None only for local development/tests.
+    pub access_control: Option<auth::AccessControl>,
 }
 
 /// Build the application router. Shared by the binary (`main.rs`) and the
 /// integration tests so they can never drift out of sync.
 pub fn build_router(state: Arc<AppState>) -> Router {
-    Router::new()
-        .route("/health", get(api::health::health))
+    let protected = Router::new()
         .route("/api/version", get(api::version::version))
         .route("/api/ai/models", get(api::ai::list_models))
         .route("/api/ai/balance", get(api::ai::get_balance))
@@ -56,6 +58,16 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/api/logs/{id}/data/{filename}",
             get(api::logs::get_log_file),
         )
-        .layer(CorsLayer::permissive())
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_access,
+        ));
+
+    Router::new()
+        .route("/health", get(api::health::health))
+        .route("/api/auth/session", get(auth::session))
+        .route("/api/auth/login", post(auth::login))
+        .route("/api/auth/logout", post(auth::logout))
+        .merge(protected)
         .with_state(state)
 }

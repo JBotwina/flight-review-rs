@@ -3,6 +3,7 @@
 //! Starts a real server on a random port, uploads a ULog fixture,
 //! verifies all API endpoints, then cleans up.
 
+use reqwest::header::{HeaderMap, HeaderValue, COOKIE, SET_COOKIE};
 use serde_json::Value;
 use std::net::TcpListener;
 use std::sync::Arc;
@@ -64,6 +65,10 @@ async fn start_server() -> (String, tokio::task::JoinHandle<()>) {
         mapbox_token: None,
         http_client: reqwest::Client::new(),
         openrouter: None,
+        access_control: Some(flight_review_server::auth::AccessControl::new(
+            "test-password-with-enough-entropy",
+            false,
+        )),
     });
 
     // Use the same router the binary serves, so the test never drifts from
@@ -95,10 +100,10 @@ async fn start_server() -> (String, tokio::task::JoinHandle<()>) {
 #[tokio::test]
 async fn test_full_lifecycle() {
     let (base_url, _handle) = start_server().await;
-    let client = reqwest::Client::new();
+    let public_client = reqwest::Client::new();
 
     // 1. Health check
-    let resp = client
+    let resp = public_client
         .get(format!("{}/health", base_url))
         .send()
         .await
@@ -106,6 +111,46 @@ async fn test_full_lifecycle() {
     assert_eq!(resp.status(), 200);
     let body: Value = resp.json().await.unwrap();
     assert_eq!(body["status"], "ok");
+
+    // Protected endpoints look nonexistent until the shared password is entered.
+    let resp = public_client
+        .get(format!("{}/api/logs", base_url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 404);
+
+    let resp = public_client
+        .post(format!("{}/api/auth/login", base_url))
+        .json(&serde_json::json!({ "password": "wrong password" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 401);
+
+    let resp = public_client
+        .post(format!("{}/api/auth/login", base_url))
+        .json(&serde_json::json!({ "password": "test-password-with-enough-entropy" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let session_cookie = resp
+        .headers()
+        .get(SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string();
+    let mut default_headers = HeaderMap::new();
+    default_headers.insert(COOKIE, HeaderValue::from_str(&session_cookie).unwrap());
+    let client = reqwest::Client::builder()
+        .default_headers(default_headers)
+        .build()
+        .unwrap();
 
     // 1b. Version info — all five fields present and non-empty.
     let resp = client
@@ -225,7 +270,7 @@ async fn test_full_lifecycle() {
     let analysis = &metadata["analysis"];
     assert!(!analysis.is_null(), "analysis should be present");
     assert!(
-        analysis["flight_modes"].as_array().unwrap().len() > 0,
+        !analysis["flight_modes"].as_array().unwrap().is_empty(),
         "should have flight modes"
     );
 
@@ -272,7 +317,7 @@ async fn test_full_lifecycle() {
     assert_eq!(resp.status(), 200);
     let stats: Value = resp.json().await.unwrap();
     assert_eq!(stats["group_by"], "ver_hw");
-    assert!(stats["data"].as_array().unwrap().len() > 0);
+    assert!(!stats["data"].as_array().unwrap().is_empty());
     assert_eq!(stats["data"][0]["group"], "AUAV_X21");
 
     // 9. Search filters
@@ -327,4 +372,28 @@ async fn test_full_lifecycle() {
         .unwrap();
     let list: Value = resp.json().await.unwrap();
     assert_eq!(list["total"], 0);
+
+    // Logging out clears the session and protected routes disappear again.
+    let resp = client
+        .post(format!("{}/api/auth/logout", base_url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let cleared_cookie = resp
+        .headers()
+        .get(SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap();
+    let resp = public_client
+        .get(format!("{}/api/logs", base_url))
+        .header(COOKIE, cleared_cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 404);
 }

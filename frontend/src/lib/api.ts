@@ -9,6 +9,10 @@ export class ApiError extends Error {
   }
 }
 
+export interface AuthSession {
+  authenticated: boolean;
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, init);
   if (!res.ok) {
@@ -23,6 +27,22 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(res.status, message);
   }
   return res.json();
+}
+
+export async function getAuthSession(): Promise<AuthSession> {
+  return apiFetch('/auth/session');
+}
+
+export async function loginWithPassword(password: string): Promise<AuthSession> {
+  return apiFetch('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+}
+
+export async function logout(): Promise<AuthSession> {
+  return apiFetch('/auth/logout', { method: 'POST' });
 }
 
 export async function getLog(id: string): Promise<LogRecord> {

@@ -6,7 +6,9 @@ use tokio::net::TcpListener;
 use tower_http::services::{ServeDir, ServeFile};
 use tracing_subscriber::EnvFilter;
 
-use flight_review_server::{ai::OpenRouterClient, db, storage::FileStorage, AppState};
+use flight_review_server::{
+    ai::OpenRouterClient, auth::AccessControl, db, storage::FileStorage, AppState,
+};
 
 #[derive(Parser)]
 #[command(version, about = "Flight Review v2 server")]
@@ -145,6 +147,15 @@ async fn run_server(config: ServeConfig) {
         tracing::info!("OpenRouter AI analysis: disabled (OPENROUTER_API_KEY is not set)");
     }
 
+    let access_control = AccessControl::from_env().expect("invalid access-control configuration");
+    if access_control.is_some() {
+        tracing::info!("shared-password access control: enabled");
+    } else if std::env::var_os("RAILWAY_ENVIRONMENT_ID").is_some() {
+        panic!("ACCESS_PASSWORD must be set in Railway environments");
+    } else {
+        tracing::warn!("shared-password access control: disabled for local development");
+    }
+
     let state = Arc::new(AppState {
         db,
         storage,
@@ -152,6 +163,7 @@ async fn run_server(config: ServeConfig) {
         mapbox_token: config.mapbox_token,
         http_client,
         openrouter,
+        access_control,
     });
 
     let mut app = flight_review_server::build_router(state);
