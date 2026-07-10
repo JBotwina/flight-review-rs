@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { PUBLIC_MAPBOX_TOKEN } from '$env/static/public';
+	import { env } from '$env/dynamic/public';
 	import type { TrackPoint, FlightModeSegment } from '$lib/types';
 	import { cursorTimestamp, timeRange } from '$lib/stores/plotSync';
 	import { getModeColor } from '$lib/utils/modeColors';
@@ -89,7 +89,8 @@
 
 	onMount(async () => {
 		if (track.length === 0) return;
-		if (!PUBLIC_MAPBOX_TOKEN) {
+		const mapboxToken = env.PUBLIC_MAPBOX_TOKEN;
+		if (!mapboxToken) {
 			error = 'Mapbox token not configured';
 			return;
 		}
@@ -99,7 +100,7 @@
 			await import('mapbox-gl/dist/mapbox-gl.css');
 
 			const mb = mapboxgl.default || mapboxgl;
-			mb.accessToken = PUBLIC_MAPBOX_TOKEN;
+			mb.accessToken = mapboxToken;
 
 			const initialBounds = getBounds();
 			map = new mb.Map({
