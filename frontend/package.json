@@ -27,7 +27,10 @@
   },
   "dependencies": {
     "@duckdb/duckdb-wasm": "^1.33.1-dev57.0",
+    "@myriaddreamin/typst-ts-web-compiler": "^0.7.0",
+    "@myriaddreamin/typst.ts": "^0.7.0",
     "chart.js": "^4.5.1",
+    "dejavu-fonts-ttf": "^2.37.3",
     "fft.js": "^4.0.4",
     "mapbox-gl": "^3.20.0",
     "uplot": "^1.6.31"

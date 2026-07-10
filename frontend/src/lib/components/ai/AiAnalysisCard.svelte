@@ -1,7 +1,10 @@
 <script lang="ts">
 	import type { AiAnalysis, AiFindingSeverity, AiRiskLevel } from '$lib/types';
+	import { downloadAiAnalysisPdf } from '$lib/utils/aiPdf';
 
-	let { analysis, compact = false }: { analysis: AiAnalysis; compact?: boolean } = $props();
+	let { analysis, compact = false, reportId }: { analysis: AiAnalysis; compact?: boolean; reportId?: string } = $props();
+	let pdfGenerating = $state(false);
+	let pdfError = $state('');
 
 	const visibleFindings = $derived(compact ? analysis.findings.slice(0, 3) : analysis.findings);
 	const confidencePercent = $derived(analysis.confidence == null ? null : Math.round(analysis.confidence * 100));
@@ -21,6 +24,18 @@
 
 	function timeLabel(start: number, end: number | null): string {
 		return end == null ? `T+${start.toFixed(1)}s` : `T+${start.toFixed(1)}–${end.toFixed(1)}s`;
+	}
+
+	async function downloadPdf() {
+		pdfGenerating = true;
+		pdfError = '';
+		try {
+			await downloadAiAnalysisPdf(analysis, reportId);
+		} catch (error) {
+			pdfError = error instanceof Error ? error.message : String(error || 'PDF generation failed.');
+		} finally {
+			pdfGenerating = false;
+		}
 	}
 </script>
 
@@ -45,10 +60,18 @@
 {:else}
 	<article class="dossier">
 		<div class="document-rail">
-			<span>PX4 / FLIGHT INTELLIGENCE</span>
-			<span>GENERATED {new Date(analysis.generated_at).toLocaleDateString()}</span>
-			<span>SCHEMA {analysis.schema_version}</span>
+			<div class="rail-metadata">
+				<span>PX4 / FLIGHT INTELLIGENCE</span>
+				<span>GENERATED {new Date(analysis.generated_at).toLocaleDateString()}</span>
+				<span>SCHEMA {analysis.schema_version}</span>
+			</div>
+			<button class="pdf-download" type="button" onclick={downloadPdf} disabled={pdfGenerating} aria-describedby={pdfError ? 'pdf-export-error' : undefined}>
+				<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14" /></svg>
+				<span>{pdfGenerating ? 'BUILDING PDF' : 'DOWNLOAD PDF'}</span>
+				<small>WASM / LOCAL</small>
+			</button>
 		</div>
+		{#if pdfError}<p class="pdf-error" id="pdf-export-error" role="alert">PDF EXPORT FAILED / {pdfError}</p>{/if}
 
 		<header class="brief-header">
 			<div class="summary-block">
@@ -152,7 +175,16 @@
 
 <style>
 	.dossier { --ink: #10262d; --muted: #6e7e7f; --line: #cbd2ce; --paper: #f8f8f3; margin-top: 1rem; border: 1px solid #bdc8c4; background: var(--paper); color: var(--ink); box-shadow: 0 18px 50px rgba(22,48,54,.12); font-family: 'IBM Plex Mono', monospace; }
-	.document-rail { min-height: 2.7rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .7rem 1.2rem; border-bottom: 1px solid var(--line); color: #718183; font-size: .52rem; letter-spacing: .13em; }
+	.document-rail { min-height: 2.7rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .55rem .65rem .55rem 1.2rem; border-bottom: 1px solid var(--line); color: #718183; font-size: .52rem; letter-spacing: .13em; }
+	.rail-metadata { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+	.pdf-download { flex: none; display: grid; grid-template-columns: 1rem auto; align-items: center; gap: .05rem .55rem; border: 1px solid #244e54; padding: .45rem .65rem; background: #102830; color: #e9f2ee; font: 600 .52rem 'IBM Plex Mono', monospace; letter-spacing: .08em; cursor: pointer; transition: .18s ease; }
+	.pdf-download svg { grid-row: 1 / 3; width: .95rem; fill: none; stroke: #c8ef4b; stroke-width: 1.7; stroke-linecap: square; stroke-linejoin: miter; }
+	.pdf-download small { color: #82a0a1; font: 500 .4rem 'IBM Plex Mono', monospace; letter-spacing: .1em; }
+	.pdf-download:hover:not(:disabled) { border-color: #102830; background: #c8ef4b; color: #102830; transform: translateY(-1px); }
+	.pdf-download:hover:not(:disabled) svg { stroke: #102830; }
+	.pdf-download:hover:not(:disabled) small { color: #36565a; }
+	.pdf-download:disabled { cursor: wait; opacity: .58; }
+	.pdf-error { margin: 0; border-bottom: 1px solid #e1b7ad; padding: .65rem 1.2rem; background: #fff1ed; color: #9b3d30; font-size: .57rem; letter-spacing: .06em; }
 	.brief-header { display: grid; grid-template-columns: minmax(0,1fr) 18rem; border-bottom: 1px solid var(--line); }
 	.summary-block { padding: clamp(2rem, 4vw, 4rem); }
 	.section-code { margin: 0 0 .8rem; color: #3d7275; font-size: .56rem; font-weight: 600; letter-spacing: .16em; }
@@ -230,5 +262,6 @@
 	.compact-findings div[data-severity='warning'] b { color: #a56b08; }
 	.compact-findings div[data-severity='critical'] b { color: #b43d34; }
 	@media (max-width: 800px) { .brief-header { grid-template-columns: 1fr; } .risk-stamp { min-height: 12rem; border-top: 1px solid var(--line); border-left: 0; } .follow-up-grid { grid-template-columns: 1fr; } .recommendation-panel { border-top: 1px solid var(--line); border-left: 0; } }
-	@media (max-width: 560px) { .document-rail span:nth-child(2) { display: none; } .finding { grid-template-columns: 2.8rem 1fr; } .finding-main { padding: 1.1rem; } .finding-meta time { width: 100%; margin-left: 0; } .evidence-block ul { grid-template-columns: 1fr; } .summary-block { padding: 2rem 1.3rem; } .findings-section { padding: 1.3rem; } }
+	@media (max-width: 680px) { .document-rail { align-items: stretch; padding-left: .8rem; } .rail-metadata { flex-direction: column; align-items: flex-start; justify-content: center; gap: .25rem; } .rail-metadata span:nth-child(2) { display: none; } }
+	@media (max-width: 560px) { .pdf-download small { display: none; } .pdf-download svg { grid-row: auto; } .finding { grid-template-columns: 2.8rem 1fr; } .finding-main { padding: 1.1rem; } .finding-meta time { width: 100%; margin-left: 0; } .evidence-block ul { grid-template-columns: 1fr; } .summary-block { padding: 2rem 1.3rem; } .findings-section { padding: 1.3rem; } }
 </style>
